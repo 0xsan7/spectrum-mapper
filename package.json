@@ -1,0 +1,14 @@
+{
+  "name": "spectrum-mapper",
+  "version": "1.0.0",
+  "description": "RF signal distribution visualization",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  }
+}
