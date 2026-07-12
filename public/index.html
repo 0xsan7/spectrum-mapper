@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spectrum Mapper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Spectrum Mapper</h1>
+      <p>RF Signal Distribution</p>
+      <div class="status"><span id="statusText">Initializing...</span></div>
+    </header>
+
+    <main>
+      <div class="map-section">
+        <h2>Signal Heatmap</h2>
+        <div class="canvas-wrapper">
+          <canvas id="heatmapCanvas" width="800" height="600"></canvas>
+        </div>
+        <div class="legend">
+          <div class="legend-bar"></div>
+          <div class="legend-labels"><span>-100 dBm</span><span>-50 dBm</span><span>-20 dBm</span></div>
+        </div>
+      </div>
+
+      <aside class="info-section">
+        <section class="panel">
+          <h3>Transmitters</h3>
+          <div id="sourcesList"></div>
+        </section>
+        <section class="panel">
+          <h3>Receivers</h3>
+          <div id="receiversList"></div>
+        </section>
+        <section class="panel">
+          <h3>Statistics</h3>
+          <div class="stats" id="statsPanel"></div>
+        </section>
+        <section class="panel">
+          <h3>Controls</h3>
+          <button id="pauseBtn">Pause</button>
+          <button id="resetBtn">Reset</button>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="websocket.js"></script>
+  <script src="colors.js"></script>
+  <script src="heatmap.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
