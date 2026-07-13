@@ -1,0 +1,9 @@
+class Performance {
+  static throttle(func, wait) {
+    let timeout;
+    return function(...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  }
+}
