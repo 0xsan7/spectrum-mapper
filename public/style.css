@@ -215,3 +215,32 @@ button:hover {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
+
+.spectrum-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.spectrum-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px;
+  background: #0a0a0a;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.spectrum-distribution {
+  display: flex;
+  height: 20px;
+  gap: 2px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.spectrum-bar {
+  flex: 1;
+  transition: all 0.3s;
+}
