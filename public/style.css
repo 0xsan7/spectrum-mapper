@@ -177,3 +177,41 @@ button:hover {
   background: #00ffff;
   transform: translateY(-1px);
 }
+
+.threat-alert {
+  background: #ff1744;
+  border-left: 3px solid #ff0000;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  animation: pulse 1s infinite;
+}
+
+.risk-badge {
+  background: #ff0000;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.threat-meta {
+  color: #ffcccc;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.no-threats {
+  color: #00ff88;
+  text-align: center;
+  padding: 15px;
+  font-size: 13px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
