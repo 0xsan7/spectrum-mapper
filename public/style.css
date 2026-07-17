@@ -244,3 +244,14 @@ button:hover {
   flex: 1;
   transition: all 0.3s;
 }
+
+.prediction-item {
+  background: #0a0a0a;
+  border-left: 2px solid #00ffff;
+  padding: 8px;
+  margin-bottom: 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+}
