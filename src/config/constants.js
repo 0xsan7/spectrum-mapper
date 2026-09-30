@@ -9,6 +9,10 @@ const CONFIG = {
   UPDATE_RATE: numEnv('UPDATE_RATE', 500),
   MIN_RSSI: numEnv('MIN_RSSI', -100),
   MAX_RSSI: numEnv('MAX_RSSI', -20),
+
+  // A cell counts as a hotspot above this RSSI. Kept here so the threshold is
+  // not a magic number buried in the heatmap code.
+  HOTSPOT_THRESHOLD: numEnv('HOTSPOT_THRESHOLD', -40),
   PORT: numEnv('PORT', 3000),
   HOST: process.env.HOST || '0.0.0.0',
 };
