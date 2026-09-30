@@ -6,6 +6,7 @@ const RFSimulation = require('./simulation');
 const Receivers = require('./receivers');
 const HeatmapGenerator = require('./heatmap');
 const Obstacles = require('./obstacles');
+const Trilateration = require('./trilateration');
 const PathLossModel = require('./pathLoss');
 const { CONFIG } = require('./config/constants');
 
@@ -67,6 +68,121 @@ function currentPathLossOptions() {
   };
 }
 
+/**
+ * The transmitter we try to localise: the mobile device, because it is the one
+ * that moves and the only one where a position estimate means anything.
+ */
+const TRACKED_SOURCE_ID = 'TX-3';
+
+/**
+ * Smoothed error for the tracked source. A single frame's error jitters with
+ * the fading draw, which makes the number unreadable; the EMA is what a survey
+ * tool would actually report. `instantErrorMetres` carries the raw value.
+ */
+const errorEma = { value: null, alpha: 0.15 };
+
+/**
+ * Estimate the tracked transmitter's position from the RSSI each receiver
+ * measures, and report the error against where it actually is.
+ *
+ * The measurements are taken from the same path loss model that drew the
+ * heatmap, so the estimate is a genuine inverse of the forward model rather
+ * than a separate calculation. Wall attenuation is added back per receiver
+ * before inverting, so a wall between a receiver and the target does not bias
+ * the range that receiver contributes.
+ */
+function locateTrackedSource() {
+  const target = simulation.sources.find((s) => s.id === TRACKED_SOURCE_ID);
+  const receiverNodes = receivers.getNodes();
+  if (!target || receiverNodes.length < 2) return null;
+
+  const pathLoss = currentPathLossOptions();
+  const rangeOptions = {
+    txPower: target.txPower,
+    exponent: pathLoss.exponent,
+    frequency: pathLoss.frequency,
+  };
+
+  // Measure, then invert each receiver's own reading. The wall loss differs
+  // per receiver, so it has to be corrected individually - a single global
+  // correction would bias whichever receivers sit behind the wall.
+  //
+  // Fading is left ON here, unlike the heatmap's own per-cell draw. With
+  // fading disabled the estimate is an exact algebraic inverse and the error
+  // is identically zero, which makes the "error in metres" figure a fiction.
+  // With it on, the reported error is the real spread a receiver network
+  // would see.
+  const readings = receiverNodes.map((receiver) => {
+    const distance = Math.hypot(receiver.x - target.x, receiver.y - target.y);
+    const rssi = PathLossModel.calculateRSSI(target.txPower, distance, {
+      ...pathLoss,
+    });
+    const wallLoss = obstacles.attenuationBetween(
+      target.x,
+      target.y,
+      receiver.x,
+      receiver.y
+    );
+    const range = Trilateration.rssiToDistance(rssi, {
+      ...rangeOptions,
+      attenuation: wallLoss,
+    });
+
+    return {
+      id: receiver.id,
+      rssi: Number(rssi.toFixed(1)),
+      wallLoss,
+      range: Number.isFinite(range) ? Number(range.toFixed(2)) : null,
+      _range: range,
+    };
+  });
+
+  const solution = Trilateration.leastSquares(
+    receiverNodes,
+    readings.map((r) => r._range)
+  );
+  if (!solution) return null;
+
+  const truth = { x: target.x, y: target.y };
+
+  // The target is known to be inside the room, so an estimate outside it is
+  // definitely wrong. Clamp rather than draw a position off the map, and
+  // report the post-clamp error so the number matches what is displayed.
+  const estimateX = Math.min(Math.max(solution.x, 0), CONFIG.ROOM_WIDTH);
+  const estimateY = Math.min(Math.max(solution.y, 0), CONFIG.ROOM_HEIGHT);
+  const estimate = { x: estimateX, y: estimateY };
+  const wasClamped = estimateX !== solution.x || estimateY !== solution.y;
+
+  const instantError = Trilateration.positionError(estimate, truth);
+  errorEma.value =
+    errorEma.value === null
+      ? instantError
+      : errorEma.alpha * instantError + (1 - errorEma.alpha) * errorEma.value;
+
+  return {
+    id: TRACKED_SOURCE_ID,
+    name: target.name,
+    truth,
+    estimate: {
+      x: estimate.x,
+      y: estimate.y,
+      rawX: solution.x,
+      rawY: solution.y,
+      wasClamped,
+      alternative: solution.alternative,
+      ambiguous: solution.ambiguous,
+      method: solution.method,
+      used: solution.used,
+    },
+    // Raw error for this frame, and the smoothed value the UI shows. Computable
+    // only here, because the server knows the truth the browser never sees.
+    errorMetres: Number(instantError.toFixed(2)),
+    smoothedErrorMetres: Number(errorEma.value.toFixed(2)),
+    residualMetres: Number(solution.errorMetres.toFixed(2)),
+    readings: readings.map(({ _range, ...rest }) => rest),
+  };
+}
+
 function updateSimulation() {
   if (!params.paused) simulation.updatePositions();
 
@@ -85,6 +201,7 @@ function updateSimulation() {
     receivers: receiverNodes,
     walls: obstacles.getWalls(),
     stats,
+    tracking: locateTrackedSource(),
     params: { ...params },
     limits: LIMITS,
     roomWidth: CONFIG.ROOM_WIDTH,
@@ -244,5 +361,7 @@ module.exports = {
   params,
   handleCommand,
   updateSimulation,
+  locateTrackedSource,
   PathLossModel,
+  Trilateration,
 };

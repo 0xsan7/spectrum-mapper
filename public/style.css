@@ -326,6 +326,34 @@ body.narrow .info-section {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
+/* ---- trilateration readout ---- */
+
+.reading-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  color: #888;
+}
+
+.reading-table th {
+  text-align: left;
+  font-weight: 400;
+  color: #666;
+  border-bottom: 1px solid #222;
+  padding: 2px 0;
+}
+
+.reading-table td {
+  padding: 2px 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.reading-table td:first-child {
+  color: #00d4ff;
+}
+
 /* ---- coverage ---- */
 
 .spectrum-bar-wrap {

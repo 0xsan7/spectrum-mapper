@@ -35,7 +35,88 @@ class HeatmapRenderer {
     this.paintCells(heatmap, roomWidth, roomHeight);
     this.drawGrid(roomWidth, roomHeight);
     this.drawWalls(data.walls || [], roomWidth, roomHeight);
+    this.drawTracking(data.tracking, roomWidth, roomHeight);
     this.drawMarkers(data, roomWidth, roomHeight);
+  }
+
+  /**
+   * Estimate vs truth for the tracked transmitter.
+   *
+   * The estimate is a crosshair, the truth keeps its normal marker, and the
+   * line between them is the error. Drawn under the markers so the truth
+   * marker is never hidden by its own error line.
+   */
+  drawTracking(tracking, roomWidth, roomHeight) {
+    if (!tracking || !tracking.estimate) return;
+    const sx = this.canvas.width / roomWidth;
+    const sy = this.canvas.height / roomHeight;
+    const { estimate, truth } = tracking;
+    if (estimate.x === null || estimate.x === undefined) return;
+
+    const ex = estimate.x * sx;
+    const ey = estimate.y * sy;
+    const tx = truth.x * sx;
+    const ty = truth.y * sy;
+
+    this.ctx.save();
+
+    // The error line, with the distance in metres on it.
+    this.ctx.strokeStyle = 'rgba(255, 212, 0, 0.9)';
+    this.ctx.lineWidth = 1.5;
+    this.ctx.setLineDash([5, 4]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(tx, ty);
+    this.ctx.lineTo(ex, ey);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+
+    // The mirror-image candidate, when only two receivers were usable. Drawn
+    // hollow so it reads as a possibility, not a result.
+    if (estimate.ambiguous && estimate.alternative) {
+      this.ctx.strokeStyle = 'rgba(255, 212, 0, 0.45)';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(
+        estimate.alternative.x * sx,
+        estimate.alternative.y * sy,
+        9,
+        0,
+        Math.PI * 2
+      );
+      this.ctx.stroke();
+    }
+
+    // The estimate itself: a crosshair with a gap in the middle.
+    this.ctx.strokeStyle = '#ffd400';
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.moveTo(ex - 12, ey);
+    this.ctx.lineTo(ex - 4, ey);
+    this.ctx.moveTo(ex + 4, ey);
+    this.ctx.lineTo(ex + 12, ey);
+    this.ctx.moveTo(ex, ey - 12);
+    this.ctx.lineTo(ex, ey - 4);
+    this.ctx.moveTo(ex, ey + 4);
+    this.ctx.lineTo(ex, ey + 12);
+    this.ctx.stroke();
+
+    this.drawLabel(
+      `est ${estimate.x.toFixed(1)}, ${estimate.y.toFixed(1)}`,
+      ex,
+      ey - 18
+    );
+
+    const label = `${tracking.errorMetres.toFixed(2)} m error`;
+    this.ctx.font = '11px ui-monospace, monospace';
+    const width = this.ctx.measureText(label).width;
+    const midX = (tx + ex) / 2;
+    const midY = (ty + ey) / 2;
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    this.ctx.fillRect(midX - width / 2 - 4, midY - 9, width + 8, 14);
+    this.ctx.fillStyle = '#ffd400';
+    this.ctx.fillText(label, midX, midY + 2);
+
+    this.ctx.restore();
   }
 
   /**

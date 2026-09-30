@@ -60,6 +60,7 @@ class Dashboard {
 
     this.render();
     this.updateSidebar();
+    this.updateTracking();
     this.updateCoverage();
   }
 
@@ -128,6 +129,70 @@ class Dashboard {
       <div class="stat-row"><label>Average</label><value>${stats.avgRSSI} dBm</value></div>
       <div class="stat-row"><label>Hotspots</label><value>${stats.hotspotCount} / ${heatmap.length}</value></div>
       <div class="stat-row"><label>Walls</label><value>${walls.length}</value></div>
+    `;
+  }
+
+  /**
+   * The trilateration readout.
+   *
+   * The error against the simulated truth is computed on the server, which is
+   * the only place both the estimate and the truth exist. Everything shown
+   * here is a value the server sent - the browser never re-derives it.
+   */
+  updateTracking() {
+    const panel = document.getElementById('trackingPanel');
+    if (!panel) return;
+    const t = this.currentData.tracking;
+
+    if (!t || !t.estimate || t.estimate.x === null) {
+      panel.innerHTML =
+        '<div class="hint">Not enough usable receivers to localise the mobile device.</div>';
+      return;
+    }
+
+    const { estimate, truth, readings } = t;
+    const rows = [
+      ['True position', `(${truth.x.toFixed(2)}, ${truth.y.toFixed(2)}) m`],
+      ['Estimate', `(${estimate.x.toFixed(2)}, ${estimate.y.toFixed(2)}) m`],
+      ['Error', `${t.smoothedErrorMetres.toFixed(2)} m`],
+      ['Error (this frame)', `${t.errorMetres.toFixed(2)} m`],
+      ['Range residual', `${t.residualMetres.toFixed(2)} m`],
+      ['Method', estimate.method],
+      ['Receivers used', `${estimate.used} / ${readings.length}`],
+    ];
+
+    const ambiguousNote = estimate.ambiguous
+      ? '<div class="hint">Only two receivers: two positions fit equally well. The hollow circle is the other candidate.</div>'
+      : '';
+
+    const clampedNote = estimate.wasClamped
+      ? `<div class="hint">Raw fit landed off the map at (${estimate.rawX.toFixed(2)}, ${estimate.rawY.toFixed(2)}) m and was clamped to the room.</div>`
+      : '';
+
+    panel.innerHTML = `
+      ${rows
+        .map(
+          ([label, value]) =>
+            `<div class="stat-row"><label>${label}</label><value>${value}</value></div>`
+        )
+        .join('')}
+      ${clampedNote}
+      ${ambiguousNote}
+      <table class="reading-table">
+        <thead><tr><th>RX</th><th>RSSI</th><th>Wall</th><th>Range</th></tr></thead>
+        <tbody>
+          ${readings
+            .map(
+              (r) => `<tr>
+                <td>${r.id}</td>
+                <td>${r.rssi}</td>
+                <td>${r.wallLoss ? `-${r.wallLoss} dB` : '-'}</td>
+                <td>${r.range === null ? 'n/a' : `${r.range} m`}</td>
+              </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
     `;
   }
 
