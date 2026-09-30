@@ -34,9 +34,42 @@ class HeatmapRenderer {
     const { heatmap, roomWidth, roomHeight } = data;
     this.paintCells(heatmap, roomWidth, roomHeight);
     this.drawGrid(roomWidth, roomHeight);
+    this.drawTrails(data.trails || {}, roomWidth, roomHeight);
     this.drawWalls(data.walls || [], roomWidth, roomHeight);
     this.drawTracking(data.tracking, roomWidth, roomHeight);
     this.drawMarkers(data, roomWidth, roomHeight);
+  }
+
+  /**
+   * Where each source has been.
+   *
+   * Drawn oldest to newest with the head brightest, so direction of travel
+   * reads without needing arrows.
+   */
+  drawTrails(trails, roomWidth, roomHeight) {
+    const entries = Object.entries(trails).filter(
+      ([, points]) => Array.isArray(points) && points.length > 1
+    );
+    if (entries.length === 0) return;
+
+    const sx = this.canvas.width / roomWidth;
+    const sy = this.canvas.height / roomHeight;
+
+    this.ctx.save();
+    this.ctx.lineCap = 'round';
+    for (const [, points] of entries) {
+      // One stroke per segment so opacity can ramp along the trail.
+      for (let i = 1; i < points.length; i++) {
+        const t = i / points.length;
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 + t * 0.3})`;
+        this.ctx.lineWidth = 1 + t * 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(points[i - 1].x * sx, points[i - 1].y * sy);
+        this.ctx.lineTo(points[i].x * sx, points[i].y * sy);
+        this.ctx.stroke();
+      }
+    }
+    this.ctx.restore();
   }
 
   /**

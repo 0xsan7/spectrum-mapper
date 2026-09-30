@@ -71,6 +71,32 @@
           </section>
 
           <section class="panel">
+            <h3>
+              RSSI over time
+              <span class="chart-legend">
+                <i class="swatch-avg"></i>avg RSSI
+                <i class="swatch-err"></i>error
+              </span>
+            </h3>
+            <canvas id="rssiChart" class="rssi-chart"></canvas>
+            <div class="hint" id="historyHint"></div>
+          </section>
+
+          <section class="panel">
+            <h3>Export</h3>
+            <div class="export-buttons">
+              <button id="exportPng" type="button">PNG</button>
+              <button id="exportSeries" type="button">Time series CSV</button>
+              <button id="exportHeatmap" type="button">Heatmap CSV</button>
+              <button id="exportReadings" type="button">Readings CSV</button>
+              <button id="exportFrame" type="button">Full JSON</button>
+            </div>
+            <div class="hint">
+              The CSVs are served by the API, so they work with curl too.
+            </div>
+          </section>
+
+          <section class="panel">
             <h3>Position estimate</h3>
             <div id="trackingPanel"></div>
           </section>
@@ -109,6 +135,8 @@
     <script src="spectrum-analysis.js"></script>
     <script src="interaction.js"></script>
     <script src="controls.js"></script>
+    <script src="chart.js"></script>
+    <script src="export.js"></script>
     <script src="dashboard.js"></script>
     <script src="responsive.js"></script>
     <script src="shortcuts.js"></script>

@@ -34,9 +34,21 @@ class Dashboard {
       dashboard: this,
     });
 
+    this.chart = new RssiChart(document.getElementById('rssiChart'), {
+      min: this.minRssi,
+      max: this.maxRssi,
+    });
+    // The server sends only the samples added since the previous frame, so the
+    // client keeps its own copy for the chart. Same cap, or a long session
+    // grows without bound.
+    this.historyBuffer = [];
+    this.exporter = new ExportManager();
+    this.bindExportButtons();
+
     window.addEventListener('resize', () => {
       this.renderer.resize();
       this.requestRender();
+      this.chart.draw();
     });
   }
 
@@ -62,6 +74,71 @@ class Dashboard {
     this.updateSidebar();
     this.updateTracking();
     this.updateCoverage();
+    this.updateChart();
+  }
+
+  updateChart() {
+    // A full snapshot replaces the buffer; a delta appends to it. The server
+    // sends one snapshot on connect and deltas thereafter.
+    if (Array.isArray(this.currentData.history)) {
+      this.historyBuffer = this.currentData.history.slice();
+    } else if (Array.isArray(this.currentData.historyDelta)) {
+      this.historyBuffer.push(...this.currentData.historyDelta);
+      if (this.historyBuffer.length > 240) {
+        this.historyBuffer.splice(0, this.historyBuffer.length - 240);
+      }
+    }
+
+    this.chart.update({
+      history: this.historyBuffer,
+      bounds: { min: this.minRssi, max: this.maxRssi },
+    });
+
+    const hint = document.getElementById('historyHint');
+    const count = this.historyBuffer.length;
+    if (hint) {
+      hint.textContent = `${count} samples buffered (last ${(
+        count * 0.5
+      ).toFixed(0)}s). Error uses its own 0-max scale.`;
+    }
+  }
+
+  /**
+   * Export controls.
+   *
+   * The PNG is built in the browser from the live canvas. Everything else is
+   * a plain link to the server's API, so the same files are reachable with
+   * curl and do not depend on this page being open.
+   */
+  bindExportButtons() {
+    const api = {
+      exportSeries: '/api/export/timeseries.csv',
+      exportHeatmap: '/api/export/heatmap.csv',
+      exportReadings: '/api/export/readings.csv',
+      exportFrame: '/api/export/frame.json',
+    };
+
+    for (const [id, href] of Object.entries(api)) {
+      const button = document.getElementById(id);
+      if (!button) continue;
+      button.addEventListener('click', () => {
+        window.location.href = href;
+      });
+    }
+
+    const png = document.getElementById('exportPng');
+    if (png) {
+      png.addEventListener('click', () => {
+        const url = this.exporter.capturePng(this.renderer, {
+          stats: this.currentData.stats,
+          params: this.currentData.params,
+          roomWidth: this.currentData.roomWidth,
+          roomHeight: this.currentData.roomHeight,
+          tracking: this.currentData.tracking,
+        });
+        this.exporter.download(url, 'spectrum-map.png');
+      });
+    }
   }
 
   /**

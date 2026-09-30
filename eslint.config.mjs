@@ -20,6 +20,8 @@ const BROWSER_CONSUMERS = {
   ColorMapper: ['public/heatmap.js', 'public/legend.js'], // colors.js
   Interaction: ['public/dashboard.js'], // interaction.js
   Controls: ['public/dashboard.js'], // controls.js
+  RssiChart: ['public/dashboard.js'], // chart.js
+  ExportManager: ['public/dashboard.js'], // export.js
   Logger: ['public/websocket.js'], // logger.js
   Throttle: ['public/controls.js'], // performance.js
   spectrumAnalyzer: ['public/dashboard.js'], // spectrum-analysis.js
@@ -31,13 +33,7 @@ const BROWSER_CONSUMERS = {
  * They are part of a classic script's public surface, so no-unused-vars must
  * not fire on the definition site.
  */
-const PENDING_SURFACE = [
-  // DataExport is dead code today: nothing instantiates it and there is no
-  // export button. It gets wired to real UI when export lands.
-  'DataExport',
-];
-
-const PUBLIC_SURFACE = [...Object.keys(BROWSER_CONSUMERS), ...PENDING_SURFACE];
+const PUBLIC_SURFACE = Object.keys(BROWSER_CONSUMERS);
 
 export default [
   {

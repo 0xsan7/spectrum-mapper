@@ -171,3 +171,96 @@ test('the broadcast payload carries walls, params and limits', () => {
     'sources report their pinned flag'
   );
 });
+
+test('live frames send only the new history sample, not the whole buffer', () => {
+  const { updateSimulation, history } = require('../src/server');
+
+  // Fill the buffer first. The saving is a function of how full the buffer is:
+  // at 21 samples the history is small either way, so the assertion below would
+  // pass trivially and prove nothing.
+  for (let i = 0; i < 260; i++) updateSimulation(false);
+  assert.ok(
+    history.samples.length >= 240,
+    'buffer should be at capacity for this test to mean anything'
+  );
+
+  const frame = updateSimulation(false);
+
+  assert.ok(
+    Array.isArray(frame.historyDelta),
+    'live frames should carry a historyDelta'
+  );
+  assert.strictEqual(frame.historyDelta.length, 1, 'one sample per frame');
+  assert.strictEqual(
+    frame.history,
+    undefined,
+    'the full buffer must not be re-sent every frame'
+  );
+  assert.strictEqual(frame.historyLength, history.samples.length);
+
+  // The regression this guards: 240 samples of history plus a 240-point trail
+  // per source, twice a second, was 85% of the frame and tripled bandwidth.
+  // Compare like for like - this frame against the same frame carrying the full
+  // history and the full trails, which is what the code used to send.
+  const naive = {
+    ...frame,
+    history: history.series(),
+    trails: Object.fromEntries(
+      frame.sources.map((s) => [s.id, history.trail(s.id)])
+    ),
+  };
+  const liveBytes = JSON.stringify(frame).length;
+  const naiveBytes = JSON.stringify(naive).length;
+
+  assert.ok(
+    liveBytes < naiveBytes,
+    'a live frame must be smaller than the same frame carrying everything'
+  );
+  // Measured ratio is ~3.8x. Anything under 3 means the buffer is being
+  // re-sent again.
+  assert.ok(
+    naiveBytes / liveBytes > 3,
+    `expected >3x saving, got ${(naiveBytes / liveBytes).toFixed(2)}x`
+  );
+});
+
+test('a full snapshot carries the entire history for a new client', () => {
+  const { updateSimulation, history } = require('../src/server');
+  const frame = updateSimulation(true);
+
+  assert.ok(Array.isArray(frame.history));
+  assert.strictEqual(frame.history.length, history.samples.length);
+  assert.strictEqual(
+    frame.historyDelta,
+    undefined,
+    'a snapshot and a delta are alternatives, not both'
+  );
+});
+
+test('a clearHistory command resets the delta cursor', () => {
+  const { updateSimulation, handleCommand, history } = require('../src/server');
+  for (let i = 0; i < 5; i++) updateSimulation(false);
+
+  assert.strictEqual(handleCommand({ type: 'clearHistory' }), null);
+  assert.strictEqual(history.samples.length, 0);
+
+  // Without the cursor reset, the next frame would slice from a stale index
+  // and send either nothing or a duplicate.
+  const frame = updateSimulation(false);
+  assert.strictEqual(frame.historyDelta.length, 1);
+});
+
+test('trails are capped on live frames but complete on a snapshot', () => {
+  const { updateSimulation } = require('../src/server');
+  for (let i = 0; i < 30; i++) updateSimulation(false);
+
+  const live = updateSimulation(false);
+  const points = live.trails['TX-1'].length;
+  assert.ok(
+    points > 1 && points <= 60,
+    `expected <=60 trail points, got ${points}`
+  );
+
+  const snapshot = updateSimulation(true);
+  assert.ok(snapshot.trails['TX-1'].length > points);
+});

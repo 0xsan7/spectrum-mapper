@@ -326,6 +326,71 @@ body.narrow .info-section {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
+/* ---- time-series chart ---- */
+
+.rssi-chart {
+  width: 100%;
+  height: 110px;
+  display: block;
+  background: #080808;
+  border: 1px solid #1e1e1e;
+  border-radius: 3px;
+}
+
+.chart-legend {
+  float: right;
+  font-size: 9px;
+  color: #666;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.chart-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 2px;
+  margin: 0 3px 0 8px;
+  vertical-align: middle;
+}
+
+.swatch-avg {
+  background: #00d4ff;
+}
+
+.swatch-err {
+  background: #ffd400;
+}
+
+/* ---- export ---- */
+
+.export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.export-buttons button {
+  flex: 1 1 auto;
+  padding: 5px 8px;
+  background: #141414;
+  color: #00d4ff;
+  border: 1px solid #242424;
+  border-radius: 3px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.export-buttons button:hover {
+  background: #1e1e1e;
+}
+
+.export-buttons button:active {
+  background: #00d4ff;
+  color: #0a0a0a;
+}
+
 /* ---- trilateration readout ---- */
 
 .reading-table {

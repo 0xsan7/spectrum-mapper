@@ -8,6 +8,8 @@ const HeatmapGenerator = require('./heatmap');
 const Obstacles = require('./obstacles');
 const Trilateration = require('./trilateration');
 const PathLossModel = require('./pathLoss');
+const History = require('./history');
+const CSV = require('./csv');
 const { CONFIG } = require('./config/constants');
 
 const app = express();
@@ -21,6 +23,25 @@ app.use(express.static(PUBLIC_DIR));
 const simulation = new RFSimulation();
 const receivers = new Receivers();
 const obstacles = new Obstacles();
+// At 2 Hz, 240 samples is the last two minutes: enough to see a pattern, small
+// enough that the buffer is a fixed-size cost. Overridable mainly so the
+// rollover behaviour can be exercised without waiting two minutes.
+const HISTORY_CAPACITY = Number(CONFIG.HISTORY_CAPACITY) || 240;
+const history = new History(HISTORY_CAPACITY);
+
+/**
+ * Sequence number of the last history sample sent to clients. A sequence
+ * rather than a count: the buffer evicts, so a count-based cursor stops
+ * advancing once the buffer is full and every delta comes back empty.
+ */
+let sentHistorySeq = -1;
+
+/**
+ * Trail points drawn per source on a live frame. The full 240-sample buffer
+ * per source per frame was the same redundancy as the history; a trail older
+ * than ~30s is not readable anyway.
+ */
+const TRAIL_POINTS = 60;
 
 /**
  * Live model parameters, adjustable from the UI. The bounds matter: this is
@@ -183,7 +204,7 @@ function locateTrackedSource() {
   };
 }
 
-function updateSimulation() {
+function updateSimulation(full = false) {
   if (!params.paused) simulation.updatePositions();
 
   const rfSources = simulation.getSourceData();
@@ -204,9 +225,37 @@ function updateSimulation() {
     tracking: locateTrackedSource(),
     params: { ...params },
     limits: LIMITS,
+    bounds: { min: CONFIG.MIN_RSSI, max: CONFIG.MAX_RSSI },
     roomWidth: CONFIG.ROOM_WIDTH,
     roomHeight: CONFIG.ROOM_HEIGHT,
   };
+
+  history.push(simulationData);
+
+  // Send only what is new, not the whole buffer. Re-sending the full history
+  // and trails twice a second made them 85% of the frame - 103 KB/s to carry
+  // ~11 KB/s of new data. A newly connected client gets one full snapshot
+  // instead, so a late joiner still has a populated chart.
+  const total = history.samples.length;
+  if (full) {
+    simulationData.history = history.series();
+    simulationData.trails = {};
+    for (const source of simulationData.sources) {
+      simulationData.trails[source.id] = history.trail(source.id);
+    }
+    sentHistorySeq = history.sequence - 1;
+  } else {
+    simulationData.historyDelta = history.since(sentHistorySeq);
+    simulationData.trails = {};
+    for (const source of simulationData.sources) {
+      simulationData.trails[source.id] = history
+        .trail(source.id)
+        .slice(-TRAIL_POINTS);
+    }
+    sentHistorySeq = history.sequence - 1;
+  }
+  simulationData.historyLength = total;
+
   return simulationData;
 }
 
@@ -287,6 +336,11 @@ function handleCommand(msg) {
       params.noise = 3;
       return null;
 
+    case 'clearHistory':
+      history.clear();
+      sentHistorySeq = -1;
+      return null;
+
     case 'ping':
       return null;
 
@@ -296,7 +350,12 @@ function handleCommand(msg) {
 }
 
 wss.on('connection', (ws) => {
-  if (simulationData) ws.send(JSON.stringify(simulationData));
+  if (simulationData) {
+    // `full: true` gives a new client the complete history and trails once, so
+    // its chart and trails are populated immediately instead of filling in from
+    // empty over the next two minutes.
+    ws.send(JSON.stringify(updateSimulation(true)));
+  }
 
   ws.on('message', (raw) => {
     let msg;
@@ -323,6 +382,78 @@ wss.on('connection', (ws) => {
     const data = updateSimulation();
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
   });
+});
+
+/**
+ * Export endpoints.
+ *
+ * Served from the server rather than assembled in the browser so the files are
+ * reproducible from curl, scriptable, and testable in Node.
+ */
+
+/** A frame must exist before there is anything to export. */
+function requireFrame(res) {
+  if (!simulationData) {
+    res.status(503).json({ error: 'no frame yet' });
+    return null;
+  }
+  return simulationData;
+}
+
+app.get('/api/export/timeseries.csv', (req, res) => {
+  const frame = requireFrame(res);
+  if (!frame) return;
+  res.type('text/csv');
+  res.set(
+    'Content-Disposition',
+    'attachment; filename="spectrum-timeseries.csv"'
+  );
+  res.send(CSV.seriesToCsv(history.series()));
+});
+
+app.get('/api/export/heatmap.csv', (req, res) => {
+  const frame = requireFrame(res);
+  if (!frame) return;
+  res.type('text/csv');
+  res.set('Content-Disposition', 'attachment; filename="spectrum-heatmap.csv"');
+  res.send(CSV.heatmapToCsv(frame));
+});
+
+app.get('/api/export/readings.csv', (req, res) => {
+  const frame = requireFrame(res);
+  if (!frame) return;
+  res.type('text/csv');
+  res.set(
+    'Content-Disposition',
+    'attachment; filename="spectrum-readings.csv"'
+  );
+  res.send(CSV.readingsToCsv(frame.tracking));
+});
+
+/** The full frame as JSON, for scripting or archiving a run. */
+app.get('/api/export/frame.json', (req, res) => {
+  const frame = requireFrame(res);
+  if (!frame) return;
+  res.set('Content-Disposition', 'attachment; filename="spectrum-frame.json"');
+  res.json({
+    exportedAt: new Date().toISOString(),
+    params: frame.params,
+    room: { width: frame.roomWidth, height: frame.roomHeight },
+    stats: frame.stats,
+    sources: frame.sources,
+    receivers: frame.receivers,
+    walls: frame.walls,
+    tracking: frame.tracking,
+    heatmap: frame.heatmap,
+    history: history.series(),
+    summary: history.summary(),
+  });
+});
+
+app.get('/api/summary', (req, res) => {
+  const frame = requireFrame(res);
+  if (!frame) return;
+  res.json({ summary: history.summary(), params: frame.params });
 });
 
 /** Start listening and begin the simulation loop. */
@@ -358,6 +489,7 @@ module.exports = {
   simulation,
   receivers,
   obstacles,
+  history,
   params,
   handleCommand,
   updateSimulation,
