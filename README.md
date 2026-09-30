@@ -105,50 +105,8 @@ Real process environment variables take precedence over `.env`.
 
 ## The model
 
-Path loss is a standard log-distance model:
-
-```
-PL(d) = PL(d0) + 10 · n · log10(d / d0)
-```
-
-with `PL(d0) = 20 · log10(4π · d0 · f / c)` — the free-space loss at the
-reference distance `d0 = 1 m`. The exponent `n`, the frequency `f`, and the
-fading magnitude are all adjustable at runtime. Distance is clamped to a
-minimum so `log10` is never evaluated at or below zero, and `n = 2` free space
-reproduces the textbook `31.5 dB` at 900 MHz and `40.0 dB` at 2.4 GHz.
-
-Sources combine in **linear power**, not by averaging dBm. Averaging dBm is
-arithmetically meaningless, and it made the previous version report a cell
-_above_ its own transmitter's power.
-
-Walls are line segments with a thickness. A path only picks up a wall's
-attenuation when it genuinely crosses it, and crossed walls sum.
-
-### Position estimation
-
-Each receiver's RSSI is inverted back to a range, then those ranges are fitted
-for position. Rather than intersecting circles, the reference receiver's
-equation is subtracted from the others to cancel the quadratic terms, leaving
-a 2 × 2 linear system solved in closed form. Circle intersection is avoided
-because with fading and walls the circles generally do not meet at a single
-point, so "pick the best pair" would be arbitrary.
-
-It degrades honestly rather than guessing:
-
-| Receivers            | Behaviour                                                                                                                                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 3 or more            | Least-squares fit, unique                                                                                                                                                                                                |
-| Exactly 2            | The normal equations are rank-1, so the geometry is solved directly instead. Two circles meet in up to two mirrored points; both are returned, the fit is flagged ambiguous, and the UI draws the other candidate hollow |
-| 1, or all coincident | No solution, reported as such                                                                                                                                                                                            |
-| Collinear            | Flagged degenerate instead of dividing by ~0                                                                                                                                                                             |
-
-Readings at or below the noise floor become `NaN` and are dropped from the fit
-rather than treated as zero range. Estimates are clamped to the room, since the
-target is known to be inside and an estimate outside it is definitely wrong.
-
-The error in metres is computed **server-side**, because it needs the true
-position, which only the server has. The browser is shown the result and never
-the truth it was compared against.
+Signal is modelled with a log-distance path-loss law, reference loss normalised
+by distance, wall attenuation, and fading — see [docs/model.md](docs/model.md).
 
 ## Architecture
 
@@ -250,7 +208,10 @@ a file that no longer exists cannot linger here.
 ├── 📚 docs/
 │   ├── README-hero.md  # how to record the real hero GIF
 │   ├── architecture.svg  # architecture diagram
-│   └── structure-banner.svg  # file-system banner
+│   ├── model.md  # path-loss model, in full
+│   ├── performance.md  # measured cost and accuracy
+│   ├── structure-banner.svg  # file-system banner
+│   └── testing.md  # how the suite is run
 ├── eslint.config.mjs  # flat config; browser globals declared here
 ├── package.json  # scripts, engines, dependencies
 ├── 🖥️ public/
@@ -319,85 +280,13 @@ Four folders carry the weight:
 
 ## Performance
 
-**The timings below were measured on the author's machine — Node v26.7.0,
-darwin/arm64, default configuration — and are not machine-independent.** A
-faster or slower host moves every figure, so CI does not compare them; it only
-checks that this section still describes what the code actually does. Re-run
-`node scripts/benchmark.js` for numbers from your own hardware.
-
-```
-Room 20x15 m at 1 m = 300 cells, 4 sources, 4 receivers
-
-Per-operation cost
-  calculateRSSI (per call)              0.24us mean     0.22us median     0.33us p95
-  pathLoss (per call)                   0.12us mean     0.11us median     0.18us p95
-  generateHeatmap (per frame)         501.46us mean   474.50us median   636.71us p95
-  calculateStats (per frame)           15.85us mean    13.67us median    22.38us p95
-  leastSquares (per call)               0.47us mean     0.45us median     0.82us p95
-
-Frame budget
-  full frame (heatmap + stats + trilateration): 0.518ms
-  configured update interval:                500ms
-  headroom:                                   966x
-  at 1.67us/cell, 500ms allows ~299,125 cells
-```
-
-Heatmap generation is essentially the whole frame's cost, and it scales
-linearly at about 1.7 µs per cell. The grid size is the limit, not the model.
-
-**Position error**, shipped receiver layout, 3 dB fading, 5000 positions
-sampled across the room: mean 4.71 m, median 4.91 m, p95 7.26 m, max 8.07 m.
-
-That average is dominated by positions far from the receivers, so the
-breakdown matters more than the headline:
-
-| Distance from room centre | Samples | Mean error |
-| ------------------------- | ------- | ---------- |
-| 0–2 m                     | 152     | 1.80 m     |
-| 2–4 m                     | 448     | 2.47 m     |
-| 4–6 m                     | 1033    | 3.64 m     |
-| 6+ m                      | 3367    | 5.46 m     |
-
-This is the expected shape: a fixed dB of fading is a _proportional_ range
-error, so a target 20 m from a receiver localises worse than one 8 m away. Near
-the middle of the default room the estimate is good to about 2 m.
-
-The error is entirely fading, not solver error. With fading disabled the fit is
-an exact algebraic inverse and the error is `0.0e+0 m` — which is exactly why
-fading is left **on** in the estimator. An earlier version set it to zero and
-reported a beautifully precise 0.00 m that measured nothing.
-
-Startup: `require('../src/server')` ≈ 77 ms. Two runtime dependencies, `express`
-and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is
-~17 KB, sent at 2 Hz.
+Measured per-operation cost and localisation accuracy on the author's machine —
+see [docs/performance.md](docs/performance.md).
 
 ## Testing
 
-The suite runs on `node:test` with no test framework dependency.
-
-```sh
-npm test
-```
-
-They are written to fail when the behaviour is wrong, not merely to pass:
-
-- **The physics is anchored to the model, not to constants copied out of it.** A
-  known distance must round-trip through RSSI and back.
-- **The trilateration inverse is checked against exact geometry.** Reverting the
-  algebra to its earlier sign error made 15 of 28 tests fail.
-- **Degenerate cases are explicit** — 1 receiver, coincident receivers,
-  collinear receivers, readings below the noise floor.
-- **The bandwidth invariant is measured.** A test fills the history buffer and
-  asserts a live frame is at least 3× smaller than the same frame carrying
-  everything. The bug that motivated it — an index-based delta cursor that
-  silently froze the chart after two minutes — was caught by a test asserting
-  one sample per frame at capacity, not by reading the code.
-- **CSV header and row order are checked against each other**, after a real bug
-  paired every heatmap cell with the wrong transmitter's coordinates.
-
-Browser-side logic (the colour ramp, legend, chart scaling) is unit tested by
-loading the real files into a VM context, so the tests exercise the shipped code
-rather than a copy of it.
+The suite runs on `node:test` with no framework dependency — see
+[docs/testing.md](docs/testing.md).
 
 ## Known limitations
 

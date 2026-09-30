@@ -14,6 +14,23 @@ const exists = (p) => fs.existsSync(path.join(ROOT, p));
 const readme = read('README.md');
 const pkg = JSON.parse(read('package.json'));
 
+/* ---- the split-out documentation ----
+ *
+ * "The model", "Performance" and "Testing" live in docs/ so the front page can
+ * be read in a minute. That means several claims are no longer in README.md,
+ * and a verifier that kept looking there would report them missing - or worse,
+ * quietly skip them.
+ *
+ * These files are required. A missing one is a failure, never an empty string
+ * that every regex then declines to match: an absent document would otherwise
+ * turn a dozen checks green by having nothing to say.
+ */
+const DOCS = {
+  'docs/model.md': null,
+  'docs/performance.md': null,
+  'docs/testing.md': null,
+};
+
 let failures = 0;
 function check(label, ok, detail) {
   if (ok) {
@@ -26,6 +43,31 @@ function check(label, ok, detail) {
 
 console.log('README claims vs reality');
 
+/* ---- load the split-out docs, failing loudly if any is absent ---- */
+for (const file of Object.keys(DOCS)) {
+  if (!exists(file)) {
+    check(`${file} exists`, false, 'the README links to it; it was moved out');
+    // Keep the key present as an empty string so the regex checks below run
+    // and fail, rather than throwing on undefined.
+    DOCS[file] = '';
+  } else {
+    DOCS[file] = read(file);
+    check(`${file} exists`, true);
+  }
+}
+const modelDoc = DOCS['docs/model.md'];
+const perfDoc = DOCS['docs/performance.md'];
+const testingDoc = DOCS['docs/testing.md'];
+
+// The README must link to each of them, or the content is unreachable.
+for (const file of [
+  'docs/model.md',
+  'docs/performance.md',
+  'docs/testing.md',
+]) {
+  check(`README links to ${file}`, readme.includes(`(${file})`));
+}
+
 /* ---- the suite runner ----
  *
  * There used to be a check that the README's hard-coded test count matched the
@@ -35,11 +77,7 @@ console.log('README claims vs reality');
  * nothing to keep in sync; what is still worth checking is that the project
  * keeps using the built-in runner and not a framework.
  */
-check(
-  'README describes the suite as running on node:test',
-  /node:test/.test(readme),
-  'say how the suite is run'
-);
+
 // Scoped to the two places a suite size would be stated, and it has to be a
 // claim about the suite rather than a number in passing prose. A blanket
 // search for "N tests" also matches the bug history - "15 of 28 tests fail"
@@ -62,6 +100,16 @@ check(
   !countIsAClaim(testingSection) &&
     shBlocks.every((block) => !countIsAClaim(block)),
   'a number here goes stale on every commit that adds a test'
+);
+check(
+  'the suite is described as running on node:test',
+  /node:test/.test(readme) || /node:test/.test(testingDoc),
+  'say how the suite is run, in the README summary or docs/testing.md'
+);
+check(
+  'docs/testing.md describes the suite',
+  /node:test/.test(testingDoc),
+  'the moved testing document must say how the suite runs'
 );
 check('README does not claim a framework', !/jest|mocha|vitest/i.test(readme));
 
@@ -319,9 +367,19 @@ if (arch) {
     'the fallback must match the diagram'
   );
   check(
-    'README model section derives the same expression',
+    'README model summary derives the same expression',
     formulaRe.test(formula(readme)),
     'the prose must match the diagram'
+  );
+  check(
+    'docs/model.md derives the same expression',
+    formulaRe.test(formula(modelDoc)),
+    'the moved model document must match the diagram'
+  );
+  check(
+    'docs/model.md states the log-distance law',
+    /PL\(d\)\s*=\s*PL\(d0\)\s*\+\s*10/.test(formula(modelDoc)),
+    'expected PL(d) = PL(d0) + 10 * n * log10(d / d0)'
   );
   check(
     'formula names the wall term',
@@ -364,7 +422,7 @@ const bench = read('scripts/benchmark.js');
 check('benchmark script exists', bench.length > 0);
 
 // Extract the fenced block the README presents as measured output.
-const block = (readme.match(/```\n(Room 20x15 m[\s\S]*?)```/) || [])[1];
+const block = (perfDoc.match(/```\n(Room 20x15 m[\s\S]*?)```/) || [])[1];
 if (!block) {
   check(
     'README quotes a measured performance block',
@@ -472,7 +530,7 @@ if (!block) {
   const { localisationErrors } = require('./localisation-errors');
   const acc = localisationErrors();
 
-  const readmeErr = Number((readme.match(/mean ([\d.]+) m, median/) || [])[1]);
+  const readmeErr = Number((perfDoc.match(/mean ([\d.]+) m, median/) || [])[1]);
   check(
     `mean position error: README ${readmeErr} m vs computed ${acc.mean.toFixed(
       2
@@ -484,7 +542,7 @@ if (!block) {
 
   // The per-band error table must also be reproduced.
   const bandMeans = new Set(acc.bands.map((b) => b.mean.toFixed(2)));
-  for (const m of readme.matchAll(
+  for (const m of perfDoc.matchAll(
     /\|\s*\d+(?:–\d+)?\+?\s*m\s*\|\s*\d+\s*\|\s*([\d.]+) m\s*\|/g
   )) {
     const claimed = m[1];
