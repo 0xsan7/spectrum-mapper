@@ -380,6 +380,58 @@ if (!block) {
   }
 }
 
+/* ---- the supported Node range must agree everywhere it is stated ----
+ * The README badge, the quick-start prose, package.json `engines` and the CI
+ * matrix are four separate statements of the same fact, and nothing tied them
+ * together: the badge said >=18, engines said >=18, and CI actually ran 20.
+ * Check the lowest version in the CI matrix against engines, and the README
+ * against engines, so they cannot drift apart again. */
+console.log('\nSupported Node versions');
+{
+  const pkg = JSON.parse(read('package.json'));
+  const engine = (pkg.engines?.node || '').match(/>=\s*(\d+)/);
+  const floor = engine ? Number(engine[1]) : null;
+  check('package.json engines states a floor', floor !== null);
+  if (floor !== null) {
+    check(
+      `README badge matches engines (>=${floor})`,
+      readme.includes(`node-%3E%3D${floor}-`),
+      `badge should read node-%3E%3D${floor}-`
+    );
+    check(
+      `README prose matches engines (>=${floor})`,
+      new RegExp(`Requires Node ${floor} or newer`).test(readme),
+      `prose should read "Requires Node ${floor} or newer"`
+    );
+
+    const ci = read('.github/workflows/ci.yml');
+    const matrix = ci.match(/node:\s*\[([^\]]+)\]/);
+    const ciFloor = matrix
+      ? Math.min(...[...matrix[1].matchAll(/\d+/g)].map((m) => Number(m[0])))
+      : null;
+    check(
+      `CI matrix lowest version is >=${floor} (engines)`,
+      ciFloor !== null && ciFloor >= floor,
+      ciFloor === null
+        ? 'no node: [..] matrix found in ci.yml'
+        : `CI tests Node ${ciFloor}, below the engines floor of ${floor}`
+    );
+
+    // Every matrix version must actually be able to run the suite. `node --test`
+    // only expands its own glob on Node 22+; on 20 it aborts with
+    // "Could not find 'test/**/*.test.js'".
+    const script = pkg.scripts?.test || '';
+    const usesGlob = /\*\*/.test(script);
+    if (usesGlob && ciFloor !== null) {
+      check(
+        'the test script glob needs Node 22+, satisfied by the matrix',
+        ciFloor >= 22,
+        `"${script}" relies on --test glob expansion, added in Node 22, but CI goes down to ${ciFloor}`
+      );
+    }
+  }
+}
+
 /* ---- the old README's fabricated claims must be gone ---- */
 const fabrications = [
   /binary search/i,

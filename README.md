@@ -30,7 +30,7 @@ GIF. Kept as a visible gap rather than an image of nothing.
   <a href="#performance">
     <img src="https://img.shields.io/badge/frame%20cost-0.5%20ms-informational" alt="Measured frame cost: 0.5 ms. See the performance section for the benchmark that produced it." height="20">
   </a>
-  <img src="https://img.shields.io/badge/node-%3E%3D18-5FA04E" alt="Requires Node 18 or newer" height="20">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-5FA04E" alt="Requires Node 22 or newer" height="20">
   <img src="https://img.shields.io/badge/runtime%20deps-express%2C%20ws-5FA04E" alt="Two runtime dependencies" height="20">
 </p>
 
@@ -56,7 +56,7 @@ watch four receivers try to work out where the mobile device is.
 
 ## Quick start
 
-Requires Node 18 or newer.
+Requires Node 22 or newer (tested on 22 and 24).
 
 ```sh
 git clone https://github.com/0xsan7/spectrum-mapper.git
