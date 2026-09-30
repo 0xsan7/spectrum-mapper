@@ -2,10 +2,10 @@
   "name": "spectrum-mapper",
   "version": "1.0.0",
   "description": "Real-time RF signal strength (RSSI) heatmap mapper with log-distance path loss, wall obstacles, and trilateration",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

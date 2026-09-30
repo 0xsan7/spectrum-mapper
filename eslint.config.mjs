@@ -71,7 +71,7 @@ export default [
   },
   {
     // Node runtime
-    files: ['server.js', 'src/**/*.js', 'test/**/*.js', 'config/**/*.js'],
+    files: ['src/**/*.js', 'test/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.node,

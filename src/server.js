@@ -1,6 +1,7 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
+const path = require('path');
 const RFSimulation = require('./simulation');
 const HeatmapGenerator = require('./heatmap');
 const { CONFIG } = require('./config/constants');
@@ -9,7 +10,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(express.static('public'));
+// Resolve against this file so `npm start` works from any working directory.
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+app.use(express.static(PUBLIC_DIR));
 
 const simulation = new RFSimulation();
 let simulationData = null;
