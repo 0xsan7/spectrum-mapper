@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
+    "fast-xml-parser": "^5.11.2",
     "globals": "^16.5.0",
     "prettier": "^3.9.9"
   }

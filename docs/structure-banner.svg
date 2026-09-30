@@ -68,7 +68,7 @@
        README's file tree keeps its emoji, where the surrounding text supplies
        the glyph. -->
   <text x="600" y="116" class="bs" fill="#5f8794" text-anchor="middle">
-    SRC 11 · PUBLIC 17 · TEST 7 · SCRIPTS 4 · DOCS 4
+    SRC 11 · PUBLIC 17 · TEST 9 · SCRIPTS 5 · DOCS 4
   </text>
   <text x="600" y="136" class="bs" fill="#2f4a56" text-anchor="middle">
     counts and tree generated from git ls-files — verify:diagrams checks them

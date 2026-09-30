@@ -155,9 +155,13 @@ const {
   RF_SOURCES,
   RECEIVER_NODES,
 } = require('../src/config/constants');
-const arch = exists('docs/architecture.svg')
-  ? read('docs/architecture.svg')
-  : '';
+const ARCH_FILE = 'docs/architecture.svg';
+check(
+  `${ARCH_FILE} exists`,
+  exists(ARCH_FILE),
+  'the architecture diagram is missing, so none of the checks below can run'
+);
+const arch = exists(ARCH_FILE) ? read(ARCH_FILE) : '';
 // Strip tags so the numbers can be searched as text rather than markup, and
 // fold the typographic minus (U+2212) to ASCII so a diagram written with the
 // nicer glyph still matches a number out of config.
@@ -166,6 +170,8 @@ const plain = arch
   .replace(/−/g, '-')
   .replace(/\s+/g, ' ');
 
+// Guarded so a missing diagram reports one loud failure above instead of
+// silently skipping every check below and reporting success.
 if (arch) {
   const cells =
     (CONFIG.ROOM_WIDTH / CONFIG.GRID_RESOLUTION) *

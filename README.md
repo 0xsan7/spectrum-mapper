@@ -69,7 +69,7 @@ Open <http://localhost:3000>.
 
 ```sh
 npm run dev     # restart on file changes
-npm test        # 97 tests, no watch mode
+npm test        # 106 tests, no watch mode
 npm run lint    # eslint
 npm run format  # prettier --write
 ```
@@ -282,6 +282,7 @@ a file that no longer exists cannot linger here.
 ├── 🔧 scripts/
 │   ├── benchmark.js  # produces the README performance numbers
 │   ├── gen-tree.js  # regenerates this tree
+│   ├── svg-xml.js
 │   ├── verify-diagrams.js  # validates the SVG assets
 │   └── verify-readme.js  # fails when docs drift from code
 ├── ⚡ src/
@@ -299,6 +300,9 @@ a file that no longer exists cannot linger here.
 │   └── trilateration.js  # RSSI → range → position
 └── 🧪 test/
     ├── browser.test.js  # browser logic loaded into a VM
+    ├── diagrams.test.js
+    ├── fixtures/
+    │   └── malformed.svg
     ├── heatmap.test.js  # grid and statistics
     ├── history.test.js  # buffer, deltas, CSV quoting
     ├── obstacles.test.js  # wall geometry, server state, NaN handling
@@ -373,7 +377,7 @@ and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is
 
 ## Testing
 
-97 tests on `node:test`, no test framework dependency.
+106 tests on `node:test`, no test framework dependency.
 
 ```sh
 npm test
