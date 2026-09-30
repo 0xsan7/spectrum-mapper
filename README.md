@@ -27,9 +27,6 @@ GIF. Kept as a visible gap rather than an image of nothing.
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licensed" height="20">
   </a>
-  <a href="#performance">
-    <img src="https://img.shields.io/badge/frame%20cost-0.5%20ms-informational" alt="Measured frame cost: 0.5 ms. See the performance section for the benchmark that produced it." height="20">
-  </a>
   <img src="https://img.shields.io/badge/node-%3E%3D22-5FA04E" alt="Requires Node 22 or newer" height="20">
   <img src="https://img.shields.io/badge/runtime%20deps-express%2C%20ws-5FA04E" alt="Two runtime dependencies" height="20">
 </p>
@@ -69,7 +66,7 @@ Open <http://localhost:3000>.
 
 ```sh
 npm run dev     # restart on file changes
-npm test        # 97 tests, no watch mode
+npm test        # 113 tests, no watch mode
 npm run lint    # eslint
 npm run format  # prettier --write
 ```
@@ -282,6 +279,8 @@ a file that no longer exists cannot linger here.
 ├── 🔧 scripts/
 │   ├── benchmark.js  # produces the README performance numbers
 │   ├── gen-tree.js  # regenerates this tree
+│   ├── localisation-errors.js
+│   ├── svg-xml.js
 │   ├── verify-diagrams.js  # validates the SVG assets
 │   └── verify-readme.js  # fails when docs drift from code
 ├── ⚡ src/
@@ -299,12 +298,16 @@ a file that no longer exists cannot linger here.
 │   └── trilateration.js  # RSSI → range → position
 └── 🧪 test/
     ├── browser.test.js  # browser logic loaded into a VM
+    ├── diagrams.test.js
+    ├── fixtures/
+    │   └── malformed.svg
     ├── heatmap.test.js  # grid and statistics
     ├── history.test.js  # buffer, deltas, CSV quoting
     ├── obstacles.test.js  # wall geometry, server state, NaN handling
     ├── pathLoss.test.js  # model anchored to reference values
     ├── server.test.js  # commands, routes, payload size
-    └── trilateration.test.js  # inversion and degenerate cases
+    ├── trilateration.test.js  # inversion and degenerate cases
+    └── verify-readme.test.js
 
 ```
 
@@ -321,9 +324,11 @@ Four folders carry the weight:
 
 ## Performance
 
-All figures below come from `node scripts/benchmark.js` on this machine —
-Node v26.7.0, darwin/arm64, default configuration. Re-run it to reproduce;
-your numbers will differ.
+**The timings below were measured on the author's machine — Node v26.7.0,
+darwin/arm64, default configuration — and are not machine-independent.** A
+faster or slower host moves every figure, so CI does not compare them; it only
+checks that this section still describes what the code actually does. Re-run
+`node scripts/benchmark.js` for numbers from your own hardware.
 
 ```
 Room 20x15 m at 1 m = 300 cells, 4 sources, 4 receivers
@@ -373,7 +378,7 @@ and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is
 
 ## Testing
 
-97 tests on `node:test`, no test framework dependency.
+113 tests on `node:test`, no test framework dependency.
 
 ```sh
 npm test

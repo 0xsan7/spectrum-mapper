@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { validateXmlFile } = require('./svg-xml');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -39,7 +40,14 @@ for (const { file, viewBox } of ASSETS) {
   console.log(`\n${file}`);
 
   if (!fs.existsSync(full)) {
-    check(`${file} exists`, false);
+    // Fail, and keep going so the report still names every missing asset
+    // rather than hiding the second one behind the first.
+    check(`${file} exists`, false, 'file is missing');
+    check(
+      `${file} is readable`,
+      false,
+      'cannot validate a file that is not there'
+    );
     continue;
   }
 
@@ -54,19 +62,11 @@ for (const { file, viewBox } of ASSETS) {
   );
 
   /* ---- well-formed XML ---- */
-  let xmlOk = true;
-  let xmlErr = '';
-  try {
-    execFileSync('xmllint', ['--noout', full], { stdio: 'pipe' });
-  } catch (err) {
-    xmlOk = false;
-    xmlErr = (err.stderr || Buffer.from('')).toString().trim().split('\n')[0];
-  }
-  if (!xmlOk && xmlErr) {
-    // xmllint absent: fall back to a parse so CI is not silently weaker.
-    xmlOk = !/xmllint/.test(xmlErr) && xmlErr === '';
-  }
-  check('well-formed XML (xmllint --noout)', xmlOk, xmlErr);
+  // Validated in Node rather than by shelling out to `xmllint`, which is not
+  // present on GitHub's ubuntu-24.04 runner image. The validator lives in
+  // scripts/svg-xml.js so a malformed fixture can prove it still fails.
+  const xml = validateXmlFile(full);
+  check('well-formed XML', xml.ok, xml.ok ? '' : xml.reason);
 
   /* ---- no script, no event handlers ---- */
   check('no <script> element', !/<script[\s>]/i.test(src));

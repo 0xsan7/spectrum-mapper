@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Deliberately malformed, and deliberately NOT valid to fix by accident.
+     Used by test/diagrams.test.js to prove the XML check can still fail.
+
+     Two independent defects:
+       1. <rect> below is never closed.
+       2. The attribute stroke-width="2" is missing its closing quote.
+
+     Do not repair this file. If it ever becomes well formed, the test that
+     relies on it fails, which is the point. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect x="10" y="10" width="80" height="80" fill="#0a0e14" stroke=#00e5ff>
+  <text x="50" y="50">broken</text>
+</svg>

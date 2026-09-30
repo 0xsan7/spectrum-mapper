@@ -14,12 +14,14 @@ const HeatmapGenerator = require('../src/heatmap');
 const Trilateration = require('../src/trilateration');
 const Receivers = require('../src/receivers');
 const { CONFIG, RF_SOURCES } = require('../src/config/constants');
+const { localisationErrors, OPTS } = require('./localisation-errors');
 
 // The shipped defaults, not invented ones. A benchmark on a different layout
 // measures a different program.
 const SOURCES = RF_SOURCES.map((s) => ({ ...s }));
 const RECEIVERS = new Receivers().getNodes();
-const OPTS = { exponent: 2.7, frequency: 2437, fadingDb: 3 };
+// OPTS and the receiver layout come from the shared accuracy module, so the
+// benchmark and verify:readme cannot drift apart on what they are measuring.
 
 function time(label, iterations, fn) {
   // Batch sub-microsecond work: performance.now() has microsecond resolution
@@ -122,76 +124,18 @@ console.log('');
  * in the sidebar, not a favourable arrangement.
  */
 console.log('Trilateration accuracy (shipped receiver layout)');
-const tracked = SOURCES.find((s) => s.id === 'TX-3') || SOURCES[0];
-const errors = [];
-// Error paired with how far the target was from the middle of the room, so the
-// report can distinguish "good near the receivers" from "degraded at the walls".
-const paired = [];
-for (let step = 0; step < 5000; step++) {
-  const t = step / 40;
-  const truth = {
-    x: (CONFIG.ROOM_WIDTH / 2) * (1 + Math.sin(t) * 0.8),
-    y: (CONFIG.ROOM_HEIGHT / 2) * (1 + Math.cos(t * 0.7) * 0.8),
-  };
-  const ranges = RECEIVERS.map((r) => {
-    const d = Math.hypot(r.x - truth.x, r.y - truth.y);
-    const rssi = PathLossModel.calculateRSSI(tracked.txPower, d, OPTS);
-    return Trilateration.rssiToDistance(rssi, {
-      txPower: tracked.txPower,
-      exponent: OPTS.exponent,
-      frequency: OPTS.frequency,
-    });
-  });
-  const sol = Trilateration.leastSquares(RECEIVERS, ranges);
-  if (sol) {
-    const e = Trilateration.positionError(sol, truth);
-    errors.push(e);
-    paired.push({
-      e,
-      r: Math.hypot(
-        truth.x - CONFIG.ROOM_WIDTH / 2,
-        truth.y - CONFIG.ROOM_HEIGHT / 2
-      ),
-    });
-  }
-}
-errors.sort((a, b) => a - b);
-const mean = errors.reduce((a, b) => a + b, 0) / errors.length;
-const pct = (q) => errors[Math.floor(errors.length * q)];
+// The accuracy walk lives in scripts/localisation-errors.js so that
+// verify:readme can check the README's accuracy figures in CI without
+// running this timing script. Both read the same computation.
+const acc = localisationErrors();
 console.log(
-  `  n=${errors.length} positions, ${OPTS.fadingDb} dB fading: mean ${mean.toFixed(
+  `  n=${acc.count} positions, ${OPTS.fadingDb} dB fading: mean ${acc.mean.toFixed(
     2
-  )} m, median ${pct(0.5).toFixed(2)} m, p95 ${pct(0.95).toFixed(2)} m, max ${pct(
-    0.999
-  ).toFixed(2)} m`
+  )} m, median ${acc.median.toFixed(2)} m, p95 ${acc.p95.toFixed(2)} m, max ${acc.max.toFixed(2)} m`
 );
 
-// The same fit with fading off, to show what the number above is measuring.
-let maxNoFading = 0;
-for (let step = 0; step < 500; step++) {
-  const truth = { x: 10, y: 7 };
-  const ranges = RECEIVERS.map((r) => {
-    const d = Math.hypot(r.x - truth.x, r.y - truth.y);
-    const rssi = PathLossModel.calculateRSSI(tracked.txPower, d, {
-      ...OPTS,
-      fadingDb: 0,
-    });
-    return Trilateration.rssiToDistance(rssi, {
-      txPower: tracked.txPower,
-      exponent: OPTS.exponent,
-      frequency: OPTS.frequency,
-    });
-  });
-  const sol = Trilateration.leastSquares(RECEIVERS, ranges);
-  if (sol) {
-    maxNoFading = Math.max(
-      maxNoFading,
-      Trilateration.positionError(sol, truth)
-    );
-  }
-}
 console.log(
-  `  with fading off the fit is an exact inverse (max ${maxNoFading.toExponential(
+  `  with fading off the fit is an exact inverse (max ${acc.maxNoFading.toExponential(
     1
   )} m): the error above is fading, not solver error`
 );
@@ -200,20 +144,11 @@ console.log(
 // cluster, and the default simulation starts the tracked device near the
 // centre. Breaking it down keeps the README honest about both.
 console.log('  error vs distance from the middle of the room:');
-for (const band of [
-  [0, 2],
-  [2, 4],
-  [4, 6],
-  [6, 20],
-]) {
-  const [lo, hi] = band;
-  const subset = paired.filter(({ r }) => r >= lo && r < hi);
-  if (subset.length === 0) continue;
-  const avg = subset.reduce((acc, { e }) => acc + e, 0) / subset.length;
+for (const band of acc.bands) {
   console.log(
-    `    ${lo}-${hi} m from centre: n=${String(subset.length).padStart(
+    `    ${band.lo}-${band.hi} m from centre: n=${String(band.n).padStart(
       4
-    )}, mean ${avg.toFixed(2)} m`
+    )}, mean ${band.mean.toFixed(2)} m`
   );
 }
 console.log('');
