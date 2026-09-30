@@ -66,7 +66,6 @@ const DESCRIPTIONS = {
   'scripts/verify-diagrams.js': 'validates the SVG assets',
   'docs/architecture.svg': 'architecture diagram',
   'docs/structure-banner.svg': 'file-system banner',
-  'docs/hero-placeholder.svg': 'hero placeholder',
   'docs/README-hero.md': 'how to record the real hero GIF',
   '.github/workflows/ci.yml': 'lint, format, test, audit, docs check',
   Dockerfile: 'multi-stage production image',

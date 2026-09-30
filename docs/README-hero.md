@@ -4,8 +4,8 @@
 placeholder: it is not a recording of the app, because no recording has been
 made yet.
 
-The README shows a grey placeholder block in its place rather than implying a
-demo exists. To replace it:
+The README says so in a comment where the image would go, rather than showing a
+grey block that implies a demo exists. To replace it:
 
 1. Start the app: `npm start`
 2. Drive Chrome through a few states worth showing - drag a transmitter, move

@@ -158,13 +158,35 @@ for (const [key, name] of [
   );
 }
 
-/* ---- the hero placeholder actually exists, and is honest about being one ---- */
-check('docs/hero-placeholder.svg exists', exists('docs/hero-placeholder.svg'));
+/* ---- no fabricated demo ----
+ *
+ * There is no hero image. One used to be a grey placeholder block, kept so the
+ * gap was visible rather than silent - but a placeholder still put an image
+ * where a reader expects a recording, and the alt text had to spend a sentence
+ * explaining that what they were looking at was not a demo. A comment saying
+ * no recording exists is more honest and costs no vertical space.
+ *
+ * docs/README-hero.md is kept: it is the note saying how to make a real one.
+ */
 check('docs/README-hero.md exists', exists('docs/README-hero.md'));
 check(
-  'README says the hero is a placeholder, not a demo',
-  /placeholder/i.test(readme) &&
-    /has not been made|not a recording/i.test(readme)
+  'README references docs/README-hero.md',
+  readme.includes('docs/README-hero.md')
+);
+check(
+  'README embeds no demo image',
+  !/<img[^>]+src="[^"]*\.(gif|png|webp|mov|mp4)"/i.test(readme),
+  'no recording has been made; do not imply otherwise'
+);
+check(
+  'README carries no hero placeholder image',
+  !readme.includes('hero-placeholder.svg'),
+  'the placeholder was removed on purpose'
+);
+check(
+  'README says no recording has been made',
+  /no demo gif yet|has not been made/i.test(readme),
+  'state plainly that the demo is absent'
 );
 
 /* ---- the architecture diagram must not contradict the config ---- */

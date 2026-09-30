@@ -71,7 +71,7 @@
        commit, and pinning it in the artwork meant editing the SVG to add a
        test. The README tree carries the same information. -->
   <text x="600" y="116" class="bs" fill="#5f8794" text-anchor="middle">
-    SRC 11 · PUBLIC 17 · SCRIPTS 6 · DOCS 4
+    SRC 11 · PUBLIC 17 · SCRIPTS 6 · DOCS 3
   </text>
   <text x="600" y="136" class="bs" fill="#2f4a56" text-anchor="middle">
     src, public, scripts and docs counts follow git ls-files — verify:diagrams checks them

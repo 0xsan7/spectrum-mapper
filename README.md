@@ -1,11 +1,7 @@
 <!--
-Hero placeholder: see docs/README-hero.md for how to record and drop in a real
-GIF. Kept as a visible gap rather than an image of nothing.
+No demo GIF yet: none has been recorded, and a placeholder image would imply a
+recording exists. See docs/README-hero.md for how to record one.
 -->
-<p align="center">
-  <img src="docs/hero-placeholder.svg" alt="Demo coming: this placeholder stands in for a recording that has not been made yet. See docs/README-hero.md." width="760">
-</p>
-
 <h1 align="center">Spectrum Mapper</h1>
 
 <p align="center">
@@ -254,7 +250,6 @@ a file that no longer exists cannot linger here.
 ├── 📚 docs/
 │   ├── README-hero.md  # how to record the real hero GIF
 │   ├── architecture.svg  # architecture diagram
-│   ├── hero-placeholder.svg  # hero placeholder
 │   └── structure-banner.svg  # file-system banner
 ├── eslint.config.mjs  # flat config; browser globals declared here
 ├── package.json  # scripts, engines, dependencies
