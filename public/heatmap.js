@@ -11,14 +11,22 @@ class HeatmapRenderer {
     const pxWidth = this.canvas.width / roomWidth;
     const pxHeight = this.canvas.height / roomHeight;
 
-    const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+    const imageData = this.ctx.createImageData(
+      this.canvas.width,
+      this.canvas.height
+    );
     const pixels = imageData.data;
 
-    heatmap.forEach(point => {
+    heatmap.forEach((point) => {
       const px = Math.round(point.x * pxWidth);
       const py = Math.round(point.y * pxHeight);
 
-      if (px >= 0 && px < this.canvas.width && py >= 0 && py < this.canvas.height) {
+      if (
+        px >= 0 &&
+        px < this.canvas.width &&
+        py >= 0 &&
+        py < this.canvas.height
+      ) {
         const color = ColorMapper.getColor(point.rssi);
         const idx = (py * this.canvas.width + px) * 4;
         pixels[idx] = color[0];
@@ -51,7 +59,7 @@ class HeatmapRenderer {
   }
 
   drawMarkers(data, pxWidth, pxHeight) {
-    data.sources.forEach(source => {
+    data.sources.forEach((source) => {
       const px = source.x * pxWidth;
       const py = source.y * pxHeight;
       this.ctx.fillStyle = '#ff00ff';
@@ -60,7 +68,7 @@ class HeatmapRenderer {
       this.ctx.fill();
     });
 
-    data.receivers.forEach(receiver => {
+    data.receivers.forEach((receiver) => {
       const px = receiver.x * pxWidth;
       const py = receiver.y * pxHeight;
       this.ctx.strokeStyle = '#00ff88';

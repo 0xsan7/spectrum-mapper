@@ -6,7 +6,7 @@ class RFSimulation {
   }
 
   updatePositions() {
-    this.sources.forEach(source => {
+    this.sources.forEach((source) => {
       source.x += source.vx;
       source.y += source.vy;
       if (source.x < 0) source.x = CONFIG.ROOM_WIDTH;
@@ -17,12 +17,12 @@ class RFSimulation {
   }
 
   getSources() {
-    return this.sources.map(s => ({
+    return this.sources.map((s) => ({
       id: s.id,
       name: s.name,
       x: parseFloat(s.x.toFixed(1)),
       y: parseFloat(s.y.toFixed(1)),
-      txPower: s.txPower
+      txPower: s.txPower,
     }));
   }
 

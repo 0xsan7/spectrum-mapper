@@ -10,7 +10,7 @@ class HeatmapGenerator {
         grid.push({
           x: parseFloat(x.toFixed(1)),
           y: parseFloat(y.toFixed(1)),
-          rssi: parseFloat(rssi.toFixed(1))
+          rssi: parseFloat(rssi.toFixed(1)),
         });
       }
     }
@@ -18,16 +18,18 @@ class HeatmapGenerator {
   }
 
   static getReceiverNodes() {
-    return RECEIVER_NODES.map(r => ({ id: r.id, x: r.x, y: r.y }));
+    return RECEIVER_NODES.map((r) => ({ id: r.id, x: r.x, y: r.y }));
   }
 
   static calculateStats(heatmap) {
-    const rssiValues = heatmap.map(p => p.rssi);
+    const rssiValues = heatmap.map((p) => p.rssi);
     return {
       maxRSSI: Math.max(...rssiValues).toFixed(1),
       minRSSI: Math.min(...rssiValues).toFixed(1),
-      avgRSSI: (rssiValues.reduce((a, b) => a + b) / rssiValues.length).toFixed(1),
-      hotspotCount: rssiValues.filter(r => r > -40).length
+      avgRSSI: (rssiValues.reduce((a, b) => a + b) / rssiValues.length).toFixed(
+        1
+      ),
+      hotspotCount: rssiValues.filter((r) => r > -40).length,
     };
   }
 }

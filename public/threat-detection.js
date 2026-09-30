@@ -12,7 +12,7 @@ class ThreatDetector {
     }
 
     const threats = [];
-    data.sources.forEach(source => {
+    data.sources.forEach((source) => {
       const deviation = Math.abs(source.txPower - this.baseline);
       if (deviation > this.threshold) {
         threats.push({
@@ -21,7 +21,7 @@ class ThreatDetector {
           risk: 'HIGH',
           deviation: deviation.toFixed(1),
           position: [source.x, source.y],
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: new Date().toLocaleTimeString(),
         });
       }
     });
@@ -35,17 +35,22 @@ class ThreatDetector {
   }
 
   displayThreats() {
-    const html = this.anomalies.map(threat => `
+    const html = this.anomalies
+      .map(
+        (threat) => `
       <div class="threat-alert">
         <span class="risk-badge">THREAT</span>
         <strong>${threat.name}</strong>
         <div class="threat-meta">Deviation: +${threat.deviation} dBm | ${threat.timestamp}</div>
       </div>
-    `).join('');
-    
+    `
+      )
+      .join('');
+
     const threatsPanel = document.getElementById('threatsPanel');
     if (threatsPanel) {
-      threatsPanel.innerHTML = html || '<div class="no-threats">System clear</div>';
+      threatsPanel.innerHTML =
+        html || '<div class="no-threats">System clear</div>';
     }
   }
 }

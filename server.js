@@ -20,7 +20,7 @@ function updateSimulation() {
   const heatmap = HeatmapGenerator.generate(rfSources);
   const receivers = HeatmapGenerator.getReceiverNodes();
   const stats = HeatmapGenerator.calculateStats(heatmap);
-  
+
   simulationData = {
     timestamp: new Date().toISOString(),
     heatmap,
@@ -28,31 +28,35 @@ function updateSimulation() {
     receivers,
     stats,
     roomWidth: CONFIG.ROOM_WIDTH,
-    roomHeight: CONFIG.ROOM_HEIGHT
+    roomHeight: CONFIG.ROOM_HEIGHT,
   };
   return simulationData;
 }
 
 const simulationInterval = setInterval(() => {
   const data = updateSimulation();
-  wss.clients.forEach(client => {
+  wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(data));
     }
   });
 }, CONFIG.UPDATE_RATE);
 
-wss.on('connection', ws => {
+wss.on('connection', (ws) => {
   if (simulationData) ws.send(JSON.stringify(simulationData));
 });
 
-server.listen(CONFIG.PORT, () => {
-  console.log('Server running on http://localhost:3000');
+server.listen(CONFIG.PORT, CONFIG.HOST, () => {
+  console.log(
+    `Server running on http://localhost:${CONFIG.PORT} ` +
+      `(room ${CONFIG.ROOM_WIDTH}x${CONFIG.ROOM_HEIGHT} m, ` +
+      `update ${CONFIG.UPDATE_RATE}ms)`
+  );
 });
 
 process.on('SIGINT', () => {
   clearInterval(simulationInterval);
-  wss.clients.forEach(client => client.close());
+  wss.clients.forEach((client) => client.close());
   server.close();
   process.exit(0);
 });

@@ -15,7 +15,7 @@ class PathLossModel {
 
   static calculateGridRSSI(x, y, rfSources) {
     let totalRSSI = 0;
-    rfSources.forEach(source => {
+    rfSources.forEach((source) => {
       const dist = this.distance(x, y, source.x, source.y);
       totalRSSI += this.calculateRSSI(source.txPower, dist);
     });

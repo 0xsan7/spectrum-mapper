@@ -1,15 +1,17 @@
 class SignalPredictor {
-  constructor(pathLossModel) {
+  constructor() {
     this.predictions = [];
   }
 
   predict(x, y, sources) {
     let totalRSSI = 0;
-    sources.forEach(source => {
-      const dist = Math.sqrt(Math.pow(x - source.x, 2) + Math.pow(y - source.y, 2));
+    sources.forEach((source) => {
+      let dist = Math.sqrt(
+        Math.pow(x - source.x, 2) + Math.pow(y - source.y, 2)
+      );
       if (dist < 0.5) dist = 0.5;
       const pathLoss = 20 * Math.log10(dist) + 20;
-      const rssi = source.txPower - pathLoss - ((Math.random() - 0.5) * 3);
+      const rssi = source.txPower - pathLoss - (Math.random() - 0.5) * 3;
       totalRSSI += Math.max(rssi, -100);
     });
     return (totalRSSI / sources.length).toFixed(1);
@@ -32,12 +34,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (canvas) {
     canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width * 20;
-      const y = (e.clientY - rect.top) / rect.height * 15;
+      const x = ((e.clientX - rect.left) / rect.width) * 20;
+      const y = ((e.clientY - rect.top) / rect.height) * 15;
 
       const dashboard = window.dashboard;
       if (dashboard && dashboard.currentData) {
-        const rssi = signalPredictor.predict(x, y, dashboard.currentData.sources);
+        const rssi = signalPredictor.predict(
+          x,
+          y,
+          dashboard.currentData.sources
+        );
         signalPredictor.addPrediction(x, y, rssi);
         showPrediction(x, y, rssi);
       }
@@ -48,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function showPrediction(x, y, rssi) {
   const msg = `Prediction at (${x.toFixed(1)}, ${y.toFixed(1)}): ${rssi} dBm`;
   console.log(msg);
-  
+
   const alert = document.createElement('div');
   alert.style.cssText = `
     position: fixed;
