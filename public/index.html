@@ -1,16 +1,17 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spectrum Mapper</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="container">
       <header>
         <h1>Spectrum Mapper</h1>
-        <p>RF Signal Distribution</p>
+        <p>RF signal strength distribution</p>
         <div class="status"><span id="statusText">Initializing...</span></div>
       </header>
 
@@ -19,61 +20,92 @@
           <h2>Signal Heatmap</h2>
           <div class="canvas-wrapper">
             <canvas id="heatmapCanvas" width="800" height="600"></canvas>
+            <div id="tooltip" class="tooltip" hidden></div>
           </div>
           <div class="legend">
-            <div class="legend-bar"></div>
-            <div class="legend-labels">
-              <span>-100 dBm</span><span>-50 dBm</span><span>-20 dBm</span>
+            <div id="legendBar" class="legend-bar"></div>
+            <div id="legendLabels" class="legend-labels">
+              <span>-</span><span>-</span><span>-</span>
             </div>
+            <p class="legend-hint">
+              Drag transmitters and receivers to reposition. Double-click a
+              transmitter to release it back into motion.
+            </p>
           </div>
         </div>
 
         <aside class="info-section">
           <section class="panel">
+            <h3>Model</h3>
+            <div id="sliders" class="sliders"></div>
+          </section>
+
+          <section class="panel">
             <h3>Transmitters</h3>
             <div id="sourcesList"></div>
           </section>
+
           <section class="panel">
             <h3>Receivers</h3>
             <div id="receiversList"></div>
           </section>
+
+          <section class="panel">
+            <h3>Walls</h3>
+            <p class="hint">
+              Draw: drag on the map. Each crossing costs attenuation.
+            </p>
+            <div class="wall-controls">
+              <label for="wallAttenuation">Attenuation</label>
+              <input
+                type="range"
+                id="wallAttenuation"
+                min="0"
+                max="40"
+                step="1"
+                value="12"
+              />
+              <output id="wallAttenuationValue">12 dB</output>
+            </div>
+            <div id="wallsList" class="walls-list"></div>
+          </section>
+
           <section class="panel">
             <h3>Statistics</h3>
             <div class="stats" id="statsPanel"></div>
           </section>
+
+          <section class="panel">
+            <h3>Coverage</h3>
+            <div id="spectrumPanel"></div>
+          </section>
+
           <section class="panel">
             <h3>Controls</h3>
-            <button id="pauseBtn">Pause</button>
-            <button id="resetBtn">Reset</button>
+            <div class="button-row">
+              <button id="pauseBtn">Pause</button>
+              <button id="resetBtn">Reset</button>
+            </div>
+            <p class="hint">
+              Space: pause. R: reset. W: wall mode. C: clear walls.
+            </p>
           </section>
         </aside>
       </main>
     </div>
 
-    <script src="websocket.js"></script>
+    <!-- Load order matters: these are classic scripts sharing one global scope. -->
+    <script src="logger.js"></script>
+    <script src="performance.js"></script>
     <script src="colors.js"></script>
+    <script src="websocket.js"></script>
+    <script src="legend.js"></script>
     <script src="heatmap.js"></script>
-    <script src="dashboard.js"></script>
-    <script src="threat-integration.js"></script>
     <script src="spectrum-analysis.js"></script>
-    <script src="spectrum-display.js"></script>
-    <script src="spectrum-hook.js"></script>
-    <script src="signal-predictor.js"></script>
-    <script src="prediction-display.js"></script>
+    <script src="interaction.js"></script>
+    <script src="controls.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="responsive.js"></script>
+    <script src="shortcuts.js"></script>
   </body>
 </html>
-<section class="panel">
-  <h3>RF Threats</h3>
-  <div id="threatsPanel"></div>
-</section>
-<section class="panel">
-  <h3>Spectrum Analysis</h3>
-  <div id="spectrumPanel"></div>
-</section>
-<section class="panel">
-  <h3>Prediction Tool</h3>
-  <p style="font-size: 11px; color: #888">
-    Click on heatmap to predict RSSI at location
-  </p>
-  <div id="predictionPanel" style="margin-top: 8px"></div>
-</section>

@@ -98,18 +98,29 @@ class PathLossModel {
    * gives -60 dBm, which is wrong by 6 dB per doubling of the source count.
    * Summing milliwatts and converting back is the physically correct form and
    * is why the heatmap no longer saturates.
+   *
+   * `obstacles` is an Obstacles instance; every wall the straight path from a
+   * source to this point crosses subtracts that wall's dB attenuation.
    */
   static calculateGridRSSI(x, y, rfSources, options = {}) {
     if (!rfSources || rfSources.length === 0) return CONFIG.MIN_RSSI;
+
+    const { obstacles, ...pathLossOptions } = options;
 
     let totalMilliwatts = 0;
     for (const source of rfSources) {
       const dist = this.distance(x, y, source.x, source.y);
       const rssi = this.calculateRSSI(source.txPower, dist, {
-        ...options,
+        ...pathLossOptions,
         ...(source.pathLossOptions || {}),
       });
-      totalMilliwatts += this.dbmToMilliwatts(rssi);
+
+      let obstacleLoss = 0;
+      if (obstacles) {
+        obstacleLoss = obstacles.attenuationBetween(source.x, source.y, x, y);
+      }
+
+      totalMilliwatts += this.dbmToMilliwatts(rssi - obstacleLoss);
     }
 
     return this.milliwattsToDbm(totalMilliwatts);

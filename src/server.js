@@ -3,7 +3,10 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const RFSimulation = require('./simulation');
+const Receivers = require('./receivers');
 const HeatmapGenerator = require('./heatmap');
+const Obstacles = require('./obstacles');
+const PathLossModel = require('./pathLoss');
 const { CONFIG } = require('./config/constants');
 
 const app = express();
@@ -15,51 +18,231 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 app.use(express.static(PUBLIC_DIR));
 
 const simulation = new RFSimulation();
+const receivers = new Receivers();
+const obstacles = new Obstacles();
+
+/**
+ * Live model parameters, adjustable from the UI. The bounds matter: this is
+ * untrusted input arriving over a socket, and a 10000 exponent or a negative
+ * attenuation would produce a garbage heatmap for every connected client.
+ */
+const params = {
+  exponent: 2.7,
+  frequency: 2437,
+  noise: 3, // +/- dB of fading
+  paused: 0, // 0 = running, 1 = frozen
+};
+
+/**
+ * Acceptable values per parameter. `paused` is a boolean sent as 0/1, so it
+ * pins to those two values instead of a numeric range.
+ *
+ * Every key here is also the complete set of writable keys: handleCommand
+ * refuses anything not listed, so a client cannot invent a new parameter.
+ */
+const LIMITS = {
+  exponent: { min: 1, max: 5, step: 0.1 },
+  frequency: { min: 100, max: 6000, step: 1 },
+  noise: { min: 0, max: 20, step: 0.5 },
+  paused: { min: 0, max: 1, step: 1 },
+};
+
 let simulationData = null;
+// Set by start(). Kept module-level so shutdown() can clear it. It is
+// deliberately not created at import time: a live interval would keep the
+// event loop (and any test process that requires this file) alive forever.
+let simulationInterval = null;
+
+function clampToLimits(key, value) {
+  const limit = LIMITS[key];
+  if (!limit || !Number.isFinite(value)) return null;
+  return Math.min(Math.max(value, limit.min), limit.max);
+}
+
+function currentPathLossOptions() {
+  return {
+    exponent: params.exponent,
+    frequency: params.frequency,
+    fading: params.noise,
+  };
+}
 
 function updateSimulation() {
-  simulation.updatePositions();
+  if (!params.paused) simulation.updatePositions();
+
   const rfSources = simulation.getSourceData();
-  const heatmap = HeatmapGenerator.generate(rfSources);
-  const receivers = HeatmapGenerator.getReceiverNodes();
+  const heatmap = HeatmapGenerator.generate(rfSources, {
+    ...currentPathLossOptions(),
+    obstacles,
+  });
+  const receiverNodes = receivers.getNodes();
   const stats = HeatmapGenerator.calculateStats(heatmap);
 
   simulationData = {
     timestamp: new Date().toISOString(),
     heatmap,
     sources: simulation.getSources(),
-    receivers,
+    receivers: receiverNodes,
+    walls: obstacles.getWalls(),
     stats,
+    params: { ...params },
+    limits: LIMITS,
     roomWidth: CONFIG.ROOM_WIDTH,
     roomHeight: CONFIG.ROOM_HEIGHT,
   };
   return simulationData;
 }
 
-const simulationInterval = setInterval(() => {
+/** Broadcast one frame to every connected client. */
+function broadcast() {
   const data = updateSimulation();
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(data));
     }
   });
-}, CONFIG.UPDATE_RATE);
+  return data;
+}
+
+/**
+ * Handle a client command. Returns an error string, or null on success.
+ * Every branch validates before mutating, because these messages come from
+ * whatever the browser has open.
+ */
+function handleCommand(msg) {
+  switch (msg.type) {
+    case 'moveSource': {
+      if (!simulation.moveSource(msg.id, msg.x, msg.y)) {
+        return `unknown source: ${msg.id}`;
+      }
+      return null;
+    }
+
+    case 'releaseSource':
+      simulation.releaseSource(msg.id);
+      return null;
+
+    case 'moveReceiver': {
+      if (!receivers.move(msg.id, msg.x, msg.y)) {
+        return `unknown receiver: ${msg.id}`;
+      }
+      return null;
+    }
+
+    case 'addWall': {
+      try {
+        obstacles.addWall(msg.wall);
+      } catch (err) {
+        return err.message;
+      }
+      return null;
+    }
+
+    case 'removeWall':
+      obstacles.removeWall(msg.index);
+      return null;
+
+    case 'clearWalls':
+      obstacles.clear();
+      return null;
+
+    case 'setParam': {
+      // Check the key against a known list, never against `key in params`:
+      // `__proto__ in params` is true, so the latter would happily let a
+      // client write to Object.prototype.
+      if (!Object.hasOwn(LIMITS, msg.key)) {
+        return `param ${msg.key} rejected (unknown parameter)`;
+      }
+      const value = clampToLimits(msg.key, msg.value);
+      if (value === null) {
+        return `param ${msg.key} rejected (out of range or not a number)`;
+      }
+      params[msg.key] = value;
+      return null;
+    }
+
+    case 'reset':
+      simulation.pinned.clear();
+      receivers.reset();
+      obstacles.clear();
+      params.exponent = 2.7;
+      params.frequency = 2437;
+      params.noise = 3;
+      return null;
+
+    case 'ping':
+      return null;
+
+    default:
+      return `unknown message type: ${msg.type}`;
+  }
+}
 
 wss.on('connection', (ws) => {
   if (simulationData) ws.send(JSON.stringify(simulationData));
+
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      ws.send(JSON.stringify({ type: 'error', message: 'invalid JSON' }));
+      return;
+    }
+
+    if (!msg || typeof msg.type !== 'string') {
+      ws.send(JSON.stringify({ type: 'error', message: 'missing type' }));
+      return;
+    }
+
+    const error = handleCommand(msg);
+    if (error) {
+      ws.send(JSON.stringify({ type: 'error', message: error }));
+      return;
+    }
+
+    // Push the new state immediately so the UI feels responsive instead of
+    // waiting out the rest of the update interval.
+    const data = updateSimulation();
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+  });
 });
 
-server.listen(CONFIG.PORT, CONFIG.HOST, () => {
-  console.log(
-    `Server running on http://localhost:${CONFIG.PORT} ` +
-      `(room ${CONFIG.ROOM_WIDTH}x${CONFIG.ROOM_HEIGHT} m, ` +
-      `update ${CONFIG.UPDATE_RATE}ms)`
-  );
-});
+/** Start listening and begin the simulation loop. */
+function start(port = CONFIG.PORT, host = CONFIG.HOST) {
+  const listening = server.listen(port, host, () => {
+    console.log(
+      `Server running on http://localhost:${port} ` +
+        `(room ${CONFIG.ROOM_WIDTH}x${CONFIG.ROOM_HEIGHT} m, ` +
+        `update ${CONFIG.UPDATE_RATE}ms)`
+    );
+  });
+  if (!simulationInterval)
+    simulationInterval = setInterval(broadcast, CONFIG.UPDATE_RATE);
+  return listening;
+}
 
-process.on('SIGINT', () => {
-  clearInterval(simulationInterval);
+if (require.main === module) start();
+
+function shutdown() {
+  if (simulationInterval) clearInterval(simulationInterval);
+  simulationInterval = null;
   wss.clients.forEach((client) => client.close());
   server.close();
   process.exit(0);
-});
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+module.exports = {
+  app,
+  server,
+  start,
+  simulation,
+  receivers,
+  obstacles,
+  params,
+  handleCommand,
+  updateSimulation,
+  PathLossModel,
+};

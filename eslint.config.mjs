@@ -15,13 +15,15 @@ import globals from 'globals';
 const BROWSER_CONSUMERS = {
   // name: [files that reference it without defining it]
   WebSocketClient: ['public/dashboard.js'], // websocket.js
-  ColorMapper: ['public/heatmap.js'], // colors.js
   HeatmapRenderer: ['public/dashboard.js'], // heatmap.js
-  Dashboard: ['public/threat-integration.js', 'public/spectrum-hook.js'],
-  threatDetector: ['public/threat-integration.js'], // threat-detection.js
-  spectrumAnalyzer: ['public/spectrum-display.js'], // spectrum-analysis.js
-  updateSpectrumPanel: ['public/spectrum-hook.js'], // spectrum-display.js
-  signalPredictor: ['public/prediction-display.js'], // signal-predictor.js
+  LegendBar: ['public/dashboard.js'], // legend.js
+  ColorMapper: ['public/heatmap.js', 'public/legend.js'], // colors.js
+  Interaction: ['public/dashboard.js'], // interaction.js
+  Controls: ['public/dashboard.js'], // controls.js
+  Logger: ['public/websocket.js'], // logger.js
+  Throttle: ['public/controls.js'], // performance.js
+  spectrumAnalyzer: ['public/dashboard.js'], // spectrum-analysis.js
+  Dashboard: ['public/responsive.js', 'public/shortcuts.js'], // dashboard.js
 };
 
 /**
@@ -33,8 +35,6 @@ const PENDING_SURFACE = [
   // DataExport is dead code today: nothing instantiates it and there is no
   // export button. It gets wired to real UI when export lands.
   'DataExport',
-  // Same story: no script calls Throttle yet.
-  'Throttle',
 ];
 
 const PUBLIC_SURFACE = [...Object.keys(BROWSER_CONSUMERS), ...PENDING_SURFACE];
