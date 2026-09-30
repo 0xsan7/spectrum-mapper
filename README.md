@@ -172,7 +172,7 @@ flowchart LR
   subgraph S["NODE.JS SERVER — :3000"]
     direction TB
     S1["Simulation<br/>4 sources · step 500 ms"]
-    S2["Path Loss<br/>RSSI = Tx − 10n·log₁₀(d) − fading<br/>n = 2.7 · f = 2437 MHz · d₀ = 1 m"]
+    S2["Path Loss<br/>RSSI = Tx − PL(d₀) − 10n·log₁₀(d/d₀) − walls − fading<br/>n = 2.7 · f = 2437 MHz · d₀ = 1 m"]
     S3["Heatmap Grid<br/>20 × 15 m ÷ 1 m = 300 cells<br/>−100…−20 dBm · 501 µs"]
     S4["Trilateration<br/>4 receivers · least squares<br/>1.8 m centre → 5.5 m edge"]
     S5["History<br/>240 samples = last 2 min"]

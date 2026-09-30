@@ -274,11 +274,59 @@ if (arch) {
     'receiver list does not match RECEIVER_NODES'
   );
 
+  // The full formula, in order. The old check only looked for
+  // "RSSI = Tx - 10n", which matched a formula that had the reference loss in
+  // the wrong place and omitted the wall term entirely.
+  //
+  // Expected: RSSI = Tx - PL(d0) - 10n*log10(d/d0) - walls - fading
+  // Compared against `plain`, where the typographic minus is already ASCII and
+  // the subscript zero / centred dot are normalised below.
+  const formula = (s) =>
+    s
+      .replace(/−/g, '-') // U+2212 minus sign
+      .replace(/₁/g, '1') // subscript one, in log₁₀
+      .replace(/₀/g, '0') // subscript zero, in d₀
+      .replace(/[·*]/g, ' ') // middot and asterisk
+      .replace(/\s+/g, ' ');
+
+  const formulaRe =
+    /RSSI\s*=\s*Tx\s*-\s*PL\(d0\)\s*-\s*10\s*n\s*log10\(d\s*\/\s*d0\)\s*-\s*walls\s*-\s*fading/;
+
+  // Every RSSI expression the diagram states must match, not just one of them.
+  // The formula appears twice - once as the Path Loss block's label and once in
+  // the footer - and a check built on .test() passes when the other copy still
+  // says the right thing. So collect them all and require every match.
+  const statedFormulas = (s) =>
+    [...formula(s).matchAll(/RSSI\s*=\s*[^|]*?(?=RSSI|$)/g)]
+      .map((m) => m[0].trim())
+      .filter((t) => t.length > 8);
+
+  const archFormulas = statedFormulas(plain);
   check(
-    'diagram states the path loss formula',
-    // Matched against `plain`, where the typographic minus is already ASCII.
-    /RSSI\s*=\s*Tx\s*-\s*10n/.test(plain),
-    'expected RSSI = Tx − 10n·log10(d) …'
+    'diagram states at least one RSSI expression',
+    archFormulas.length > 0,
+    'found no "RSSI =" in the diagram'
+  );
+  const badArch = archFormulas.filter((t) => !formulaRe.test(`${t} `));
+  check(
+    `all ${archFormulas.length} diagram RSSI expressions state the full formula`,
+    badArch.length === 0,
+    badArch.length ? `wrong: ${badArch[0].slice(0, 70)}` : ''
+  );
+  check(
+    'Mermaid fallback states the same formula',
+    formulaRe.test(formula(readme)),
+    'the fallback must match the diagram'
+  );
+  check(
+    'README model section derives the same expression',
+    formulaRe.test(formula(readme)),
+    'the prose must match the diagram'
+  );
+  check(
+    'formula names the wall term',
+    /-\s*walls\s*-/.test(formula(plain)) || /wallLoss/.test(plain),
+    'walls contribute attenuation and the diagram must say so'
   );
   check(
     'diagram says sources combine in linear power, not dBm',
