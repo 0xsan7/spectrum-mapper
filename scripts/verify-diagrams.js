@@ -189,7 +189,10 @@ const tracked = execFileSync('git', ['ls-files'], {
   .split('\n')
   .filter(Boolean)
   .filter((f) => f !== 'package-lock.json');
-for (const dir of ['src', 'public', 'test', 'scripts', 'docs']) {
+// The test count is not checked against a hard-coded number in the banner.
+// It used to be, and it moved on every commit that added or removed a test
+// file, which is a poor reason to edit a diagram.
+for (const dir of ['src', 'public', 'scripts', 'docs']) {
   const actual = tracked.filter((f) => f.startsWith(`${dir}/`)).length;
   const m = banner.match(new RegExp(`${dir.toUpperCase()}\\s+(\\d+)`, 'i'));
   const claimed = m ? Number(m[1]) : null;
@@ -199,6 +202,11 @@ for (const dir of ['src', 'public', 'test', 'scripts', 'docs']) {
     claimed === null ? 'no count found in the banner' : 'count is stale'
   );
 }
+check(
+  'banner does not hard-code the test count',
+  !/\bTEST\s+\d+\b/i.test(banner),
+  'the test count changes on nearly every commit; do not pin it in art'
+);
 
 /* ---- the tree must match the working tree ---- */
 // Tolerant of the blank line Prettier inserts between the HTML comment and the

@@ -66,7 +66,7 @@ Open <http://localhost:3000>.
 
 ```sh
 npm run dev     # restart on file changes
-npm test        # 113 tests, no watch mode
+npm test        # runs the suite once, no watch mode
 npm run lint    # eslint
 npm run format  # prettier --write
 ```
@@ -378,7 +378,7 @@ and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is
 
 ## Testing
 
-113 tests on `node:test`, no test framework dependency.
+The suite runs on `node:test` with no test framework dependency.
 
 ```sh
 npm test

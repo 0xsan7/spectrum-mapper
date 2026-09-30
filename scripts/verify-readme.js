@@ -26,24 +26,43 @@ function check(label, ok, detail) {
 
 console.log('README claims vs reality');
 
-/* ---- test count ---- */
-const testCount = fs
-  .readdirSync(path.join(ROOT, 'test'))
-  .filter((f) => f.endsWith('.test.js'))
-  .reduce((acc, f) => {
-    const src = read(`test/${f}`);
-    return acc + (src.match(/^test\(/gm) || []).length;
-  }, 0);
-const claimedTests = Number(
-  (readme.match(/(\d+) tests, no watch mode/) || [])[1]
-);
+/* ---- the suite runner ----
+ *
+ * There used to be a check that the README's hard-coded test count matched the
+ * number of `test(` calls in test/. It was correct, and it fired on every
+ * commit that added or removed a test - including commits that had nothing to
+ * do with the README. The count is now stated nowhere in the docs, so there is
+ * nothing to keep in sync; what is still worth checking is that the project
+ * keeps using the built-in runner and not a framework.
+ */
 check(
-  `test count (${testCount} in test/, README says ${claimedTests})`,
-  claimedTests === testCount,
-  'run `npm test` for the authoritative count'
+  'README describes the suite as running on node:test',
+  /node:test/.test(readme),
+  'say how the suite is run'
 );
-
-/* ---- the test count really is what npm test reports ---- */
+// Scoped to the two places a suite size would be stated, and it has to be a
+// claim about the suite rather than a number in passing prose. A blanket
+// search for "N tests" also matches the bug history - "15 of 28 tests fail"
+// describes a past run of an earlier suite, and failing on that would be
+// wrong. So: a number that is not part of "N of M", and not adjacent to
+// words like "fail" or "passed".
+const testingSection =
+  (readme.match(/^## Testing\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+// Every `sh` block, not just the first: the first one is the clone
+// instructions, and the npm command block is a different one further down.
+const shBlocks = [...readme.matchAll(/^```sh[\s\S]*?^```/gm)].map((m) => m[0]);
+const countIsAClaim = (s) =>
+  [...s.matchAll(/^.*?\b\d+\s+tests?\b.*$/gm)].some(
+    (line) =>
+      !/\d+\s+of\s+\d+\s+tests?\b/.test(line) &&
+      !/\b(fail|failed|pass|passed|broke|broken|green|red)\b/i.test(line)
+  );
+check(
+  'README does not hard-code a test count',
+  !countIsAClaim(testingSection) &&
+    shBlocks.every((block) => !countIsAClaim(block)),
+  'a number here goes stale on every commit that adds a test'
+);
 check('README does not claim a framework', !/jest|mocha|vitest/i.test(readme));
 
 /* ---- runtime dependencies ---- */
