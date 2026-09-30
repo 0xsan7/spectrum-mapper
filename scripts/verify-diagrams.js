@@ -224,6 +224,22 @@ if (treeBlock === undefined) {
     'tree has a comment per file',
     treeBlock.split('\n').filter((l) => l.includes('#')).length > 20
   );
+  // All the '#' markers share one column. Checked rather than trusted, because
+  // padding per-line as the tree is walked cannot produce this: a deep file
+  // encountered early would set a width that a later, wider name exceeded.
+  const commentCols = [
+    ...new Set(
+      treeBlock
+        .split('\n')
+        .filter((l) => l.includes('  # '))
+        .map((l) => l.indexOf('#'))
+    ),
+  ];
+  check(
+    `tree comments share one column (${commentCols.length} distinct)`,
+    commentCols.length === 1,
+    commentCols.length > 1 ? `columns found: ${commentCols.join(', ')}` : ''
+  );
   for (const emoji of ['⚡', '🖥️', '🧪', '🔧', '📚']) {
     check(`tree has the ${emoji} folder emoji`, treeBlock.includes(emoji));
   }

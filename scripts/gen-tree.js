@@ -109,9 +109,14 @@ for (const file of files) {
 
 const lines = [];
 
-function comment(file) {
-  const d = DESCRIPTIONS[file];
-  return d ? `  # ${d}` : '';
+// Comments are aligned into one column across the whole tree. Two passes: build
+// every line first, then pad the name out to the widest one. Padding per-line
+// as the tree is walked cannot work, because a deep file encountered early
+// would set a width that a later, wider name would then exceed.
+const COMMENT_COLUMN_MIN = 2; // at least this many spaces before the '#'
+
+function commentFor(file) {
+  return DESCRIPTIONS[file] || '';
 }
 
 function render(node, prefix, pathSoFar) {
@@ -122,17 +127,35 @@ function render(node, prefix, pathSoFar) {
     const full = pathSoFar ? `${pathSoFar}/${name}` : name;
 
     if (child.isFile) {
-      lines.push(`${prefix}${branch}${name}${comment(full)}`);
+      lines.push({ prefix, branch, name, comment: commentFor(full) });
     } else {
       const emoji = EMOJI[name] ? `${EMOJI[name]} ` : '';
-      lines.push(`${prefix}${branch}${emoji}${name}/`);
+      lines.push({ prefix, branch, name: `${emoji}${name}/`, comment: '' });
       render(child, prefix + (last ? '    ' : '│   '), full);
     }
   });
 }
 
 render(root, '', '');
-const tree = lines.join('\n');
+
+// Second pass: pad every commented line out to the widest name in the tree, so
+// all the '#' markers sit in a single column. Folders carry no comment, so they
+// are left at their natural width and stay flush with the commented rows.
+// Width is measured on the whole rendered head - indent plus branch plus name -
+// not the name alone. Measuring the name put a nested file's comment in a
+// different column from its siblings.
+const headWidth = (l) => `${l.prefix}${l.branch}${l.name}`.length;
+const width = Math.max(
+  COMMENT_COLUMN_MIN,
+  ...lines.filter((l) => l.comment).map(headWidth)
+);
+const tree = lines
+  .map((l) => {
+    const head = `${l.prefix}${l.branch}${l.name}`;
+    if (!l.comment) return head;
+    return `${head}${' '.repeat(width - headWidth(l) + 2)}# ${l.comment}`;
+  })
+  .join('\n');
 
 if (process.argv.includes('--write')) {
   const readmePath = path.join(ROOT, 'README.md');

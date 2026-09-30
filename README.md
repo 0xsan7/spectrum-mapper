@@ -23,8 +23,12 @@ recording exists. See docs/README-hero.md for how to record one.
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licensed" height="20">
   </a>
-  <img src="https://img.shields.io/badge/node-%3E%3D22-5FA04E" alt="Requires Node 22 or newer" height="20">
-  <img src="https://img.shields.io/badge/runtime%20deps-express%2C%20ws-5FA04E" alt="Two runtime dependencies" height="20">
+  <a href="https://nodejs.org/en/download">
+    <img src="https://img.shields.io/badge/node-%3E%3D22-5FA04E" alt="Requires Node 22 or newer" height="20">
+  </a>
+  <a href="package.json">
+    <img src="https://img.shields.io/badge/runtime%20deps-express%2C%20ws-5FA04E" alt="Two runtime dependencies: express and ws" height="20">
+  </a>
 </p>
 
 ---
@@ -193,76 +197,76 @@ a file that no longer exists cannot linger here.
 <!-- tree:start -->
 
 ```text
-├── .dockerignore  # image build context exclusions
-├── .env.example  # every setting, documented
+├── .dockerignore              # image build context exclusions
+├── .env.example               # every setting, documented
 ├── 🔄 .github/
 │   └── workflows/
-│       └── ci.yml  # lint, format, test, audit, docs check
-├── .gitignore  # ignored paths
-├── .prettierignore  # formatting exclusions
-├── .prettierrc.json  # formatting config
-├── CHANGELOG.md  # release history
-├── CONTRIBUTING.md  # how to contribute
-├── Dockerfile  # multi-stage production image
-├── LICENSE  # MIT
-├── README.md  # this file
+│       └── ci.yml             # lint, format, test, audit, docs check
+├── .gitignore                 # ignored paths
+├── .prettierignore            # formatting exclusions
+├── .prettierrc.json           # formatting config
+├── CHANGELOG.md               # release history
+├── CONTRIBUTING.md            # how to contribute
+├── Dockerfile                 # multi-stage production image
+├── LICENSE                    # MIT
+├── README.md                  # this file
 ├── 📚 docs/
-│   ├── README-hero.md  # how to record the real hero GIF
-│   ├── architecture.svg  # architecture diagram
-│   ├── model.md  # path-loss model, in full
-│   ├── performance.md  # measured cost and accuracy
-│   ├── structure-banner.svg  # file-system banner
-│   └── testing.md  # how the suite is run
-├── eslint.config.mjs  # flat config; browser globals declared here
-├── package.json  # scripts, engines, dependencies
+│   ├── README-hero.md         # how to record the real hero GIF
+│   ├── architecture.svg       # architecture diagram
+│   ├── model.md               # path-loss model, in full
+│   ├── performance.md         # measured cost and accuracy
+│   ├── structure-banner.svg   # file-system banner
+│   └── testing.md             # how the suite is run
+├── eslint.config.mjs          # flat config; browser globals declared here
+├── package.json               # scripts, engines, dependencies
 ├── 🖥️ public/
-│   ├── chart.js  # RSSI and error time series
-│   ├── colors.js  # RSSI → RGB ramp
-│   ├── controls.js  # sliders, transport, wall controls
-│   ├── dashboard.js  # single app instance, frame dispatch
-│   ├── export.js  # PNG compositor
-│   ├── favicon.svg  # icon
-│   ├── heatmap.js  # canvas renderer, walls, trails, markers
-│   ├── index.html  # document shell and sidebar
-│   ├── interaction.js  # TX/RX dragging, wall drawing
-│   ├── legend.js  # legend built from the same ramp
-│   ├── logger.js  # namespaced console logging
-│   ├── performance.js  # throttle helper
-│   ├── responsive.js  # viewport listener
-│   ├── shortcuts.js  # keyboard commands
-│   ├── spectrum-analysis.js  # coverage statistics
-│   ├── style.css  # all styling
-│   └── websocket.js  # connection and reconnect state
+│   ├── chart.js               # RSSI and error time series
+│   ├── colors.js              # RSSI → RGB ramp
+│   ├── controls.js            # sliders, transport, wall controls
+│   ├── dashboard.js           # single app instance, frame dispatch
+│   ├── export.js              # PNG compositor
+│   ├── favicon.svg            # icon
+│   ├── heatmap.js             # canvas renderer, walls, trails, markers
+│   ├── index.html             # document shell and sidebar
+│   ├── interaction.js         # TX/RX dragging, wall drawing
+│   ├── legend.js              # legend built from the same ramp
+│   ├── logger.js              # namespaced console logging
+│   ├── performance.js         # throttle helper
+│   ├── responsive.js          # viewport listener
+│   ├── shortcuts.js           # keyboard commands
+│   ├── spectrum-analysis.js   # coverage statistics
+│   ├── style.css              # all styling
+│   └── websocket.js           # connection and reconnect state
 ├── 🔧 scripts/
-│   ├── benchmark.js  # produces the README performance numbers
-│   ├── gen-tree.js  # regenerates this tree
+│   ├── benchmark.js           # produces the README performance numbers
+│   ├── gen-tree.js            # regenerates this tree
 │   ├── localisation-errors.js
 │   ├── svg-xml.js
-│   ├── verify-diagrams.js  # validates the SVG assets
-│   └── verify-readme.js  # fails when docs drift from code
+│   ├── verify-diagrams.js     # validates the SVG assets
+│   └── verify-readme.js       # fails when docs drift from code
 ├── ⚡ src/
 │   ├── ⚙️ config/
-│   │   ├── constants.js  # room, grid, model and node defaults
-│   │   └── env.js  # dependency-free .env loader
-│   ├── csv.js  # CSV formatting for the export API
-│   ├── heatmap.js  # grid generation and statistics
-│   ├── history.js  # rolling time-series buffer
-│   ├── obstacles.js  # wall geometry and per-crossing attenuation
-│   ├── pathLoss.js  # log-distance model, dBm ↔ linear power
-│   ├── receivers.js  # receiver node state
-│   ├── server.js  # Express + ws, state owner, command validation
-│   ├── simulation.js  # transmitter positions, velocity, pinning
-│   └── trilateration.js  # RSSI → range → position
+│   │   ├── constants.js       # room, grid, model and node defaults
+│   │   └── env.js             # dependency-free .env loader
+│   ├── csv.js                 # CSV formatting for the export API
+│   ├── heatmap.js             # grid generation and statistics
+│   ├── history.js             # rolling time-series buffer
+│   ├── obstacles.js           # wall geometry and per-crossing attenuation
+│   ├── pathLoss.js            # log-distance model, dBm ↔ linear power
+│   ├── receivers.js           # receiver node state
+│   ├── server.js              # Express + ws, state owner, command validation
+│   ├── simulation.js          # transmitter positions, velocity, pinning
+│   └── trilateration.js       # RSSI → range → position
 └── 🧪 test/
-    ├── browser.test.js  # browser logic loaded into a VM
+    ├── browser.test.js        # browser logic loaded into a VM
     ├── diagrams.test.js
     ├── fixtures/
     │   └── malformed.svg
-    ├── heatmap.test.js  # grid and statistics
-    ├── history.test.js  # buffer, deltas, CSV quoting
-    ├── obstacles.test.js  # wall geometry, server state, NaN handling
-    ├── pathLoss.test.js  # model anchored to reference values
-    ├── server.test.js  # commands, routes, payload size
+    ├── heatmap.test.js        # grid and statistics
+    ├── history.test.js        # buffer, deltas, CSV quoting
+    ├── obstacles.test.js      # wall geometry, server state, NaN handling
+    ├── pathLoss.test.js       # model anchored to reference values
+    ├── server.test.js         # commands, routes, payload size
     ├── trilateration.test.js  # inversion and degenerate cases
     └── verify-readme.test.js
 
