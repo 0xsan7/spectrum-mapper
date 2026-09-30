@@ -138,6 +138,16 @@ if (exists('CHANGELOG.md')) {
     /###\s+Fixed/.test(changelog),
     'expected a Fixed section'
   );
+  // The changelog heading and package.json must name the same release, or the
+  // notes describe a version nobody is on.
+  const newest = (changelog.match(/^##\s+\[?([\d.]+)\]?/m) || [])[1];
+  check(
+    `CHANGELOG's newest entry matches package.json (${pkg.version})`,
+    newest === pkg.version,
+    newest
+      ? `changelog says ${newest}, package.json says ${pkg.version}`
+      : 'no version heading'
+  );
 }
 const RETROSPECTIVES =
   /earlier version|previous version|the previous (README|version)|used to report|real bug\b|motivated it/i;
