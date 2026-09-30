@@ -250,6 +250,7 @@ a file that no longer exists cannot linger here.
 ├── .gitignore  # ignored paths
 ├── .prettierignore  # formatting exclusions
 ├── .prettierrc.json  # formatting config
+├── CONTRIBUTING.md  # how to contribute
 ├── Dockerfile  # multi-stage production image
 ├── LICENSE  # MIT
 ├── README.md  # this file
