@@ -24,9 +24,9 @@ fading magnitude are all adjustable at runtime. Distance is clamped to a
 minimum so `log10` is never evaluated at or below zero, and `n = 2` free space
 reproduces the textbook `31.5 dB` at 900 MHz and `40.0 dB` at 2.4 GHz.
 
-Sources combine in **linear power**, not by averaging dBm. Averaging dBm is
-arithmetically meaningless, and it made the previous version report a cell
-_above_ its own transmitter's power.
+Sources combine in **linear power**, not by averaging dBm, which is
+arithmetically meaningless. See [CHANGELOG.md](../CHANGELOG.md) for what
+that changed.
 
 Walls are line segments with a thickness. A path only picks up a wall's
 attenuation when it genuinely crosses it, and crossed walls sum.

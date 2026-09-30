@@ -67,6 +67,7 @@ const DESCRIPTIONS = {
   'docs/architecture.svg': 'architecture diagram',
   'docs/structure-banner.svg': 'file-system banner',
   'docs/README-hero.md': 'how to record the real hero GIF',
+  CHANGELOG: 'release notes and bug history',
   'docs/model.md': 'path-loss model, in full',
   'docs/performance.md': 'measured cost and accuracy',
   'docs/testing.md': 'how the suite is run',

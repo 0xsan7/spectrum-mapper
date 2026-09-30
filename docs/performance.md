@@ -48,8 +48,7 @@ the middle of the default room the estimate is good to about 2 m.
 
 The error is entirely fading, not solver error. With fading disabled the fit is
 an exact algebraic inverse and the error is `0.0e+0 m` — which is exactly why
-fading is left **on** in the estimator. An earlier version set it to zero and
-reported a beautifully precise 0.00 m that measured nothing.
+fading is left **on** in the estimator.
 
 Startup: `require('../src/server')` ≈ 77 ms. Two runtime dependencies, `express`
 and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is

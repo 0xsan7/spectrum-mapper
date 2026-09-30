@@ -113,6 +113,49 @@ check(
 );
 check('README does not claim a framework', !/jest|mocha|vitest/i.test(readme));
 
+/* ---- bug history belongs in the changelog ----
+ *
+ * The docs used to carry retrospectives - "an earlier version set it to zero",
+ * "made 15 of 28 tests fail". They are good writing and they belong in one
+ * place: CHANGELOG.md, where the reader goes looking for them. Left in the
+ * reference docs they read as caveats about the current behaviour rather than
+ * as history, and they duplicate what the changelog already says.
+ */
+check(
+  'CHANGELOG.md exists',
+  exists('CHANGELOG.md'),
+  'the bug history has to live somewhere'
+);
+if (exists('CHANGELOG.md')) {
+  const changelog = read('CHANGELOG.md');
+  check(
+    'CHANGELOG has a 1.1.0 entry',
+    /^##\s+\[?1\.1\.0\]?/m.test(changelog),
+    'expected a "## [1.1.0]" heading'
+  );
+  check(
+    'CHANGELOG records the fixed bugs',
+    /###\s+Fixed/.test(changelog),
+    'expected a Fixed section'
+  );
+}
+const RETROSPECTIVES =
+  /earlier version|previous version|the previous (README|version)|used to report|real bug\b|motivated it/i;
+for (const [file, body] of [
+  ['docs/model.md', modelDoc],
+  ['docs/performance.md', perfDoc],
+  ['docs/testing.md', testingDoc],
+]) {
+  const offenders = body.split('\n').filter((l) => RETROSPECTIVES.test(l));
+  check(
+    `${file} carries no bug history`,
+    offenders.length === 0,
+    offenders.length
+      ? `move to CHANGELOG.md: "${offenders[0].trim().slice(0, 60)}"`
+      : ''
+  );
+}
+
 /* ---- runtime dependencies ---- */
 const deps = Object.keys(pkg.dependencies);
 check(

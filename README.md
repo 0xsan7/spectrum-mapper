@@ -201,6 +201,7 @@ a file that no longer exists cannot linger here.
 ├── .gitignore  # ignored paths
 ├── .prettierignore  # formatting exclusions
 ├── .prettierrc.json  # formatting config
+├── CHANGELOG.md  # release history
 ├── CONTRIBUTING.md  # how to contribute
 ├── Dockerfile  # multi-stage production image
 ├── LICENSE  # MIT
@@ -323,6 +324,11 @@ Roughly in the order I expect to do them.
       without the frame budget moving
 - [ ] **Recorded demo GIF** — replacing the placeholder at the top
 - [ ] **A real accuracy metric** for when there is no simulated truth
+
+## Changelog
+
+Release notes and the full list of fixes live in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
