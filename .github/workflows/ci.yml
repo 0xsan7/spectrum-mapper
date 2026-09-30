@@ -39,6 +39,12 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Verify README claims against the code
+        # Fails if the README quotes a performance number that no longer
+        # reproduces, names a file or endpoint that does not exist, or claims
+        # a test count that has drifted from the suite.
+        run: npm run verify:readme
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

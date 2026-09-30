@@ -1,379 +1,332 @@
-# Spectrum Mapper
-
-**Real-time RF signal distribution visualization system with interactive heatmap rendering**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/Node.js-v14+-green)](https://nodejs.org/)
-[![WebSocket](https://img.shields.io/badge/WebSocket-Real--time-blue)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
-
-## Overview
-
-Spectrum Mapper is a full-stack IoT visualization platform that simulates RF signal propagation across a defined space. The system renders real-time heatmaps showing signal intensity distribution from multiple wireless transmitters monitored by fixed receiver nodes.
-
-Built with modern web technologies and clean architecture, this project demonstrates professional-grade IoT system design with real-time data streaming, signal processing, and interactive visualization.
-
-## Key Features
-
-- **Real-time Heatmap Visualization** - Canvas-based rendering at 2 Hz update rate
-- **RF Propagation Simulation** - Realistic path loss model using free-space formula
-- **Multi-Source Tracking** - 4 RF transmitters with configurable power levels (5-20 dBm)
-- **Distributed Monitoring** - 4 fixed receiver nodes capturing signal strength
-- **Interactive Dashboard** - Pause/resume controls, statistics panel, responsive layout
-- **WebSocket Streaming** - Bi-directional real-time communication with automatic reconnection
-- **Production-Ready Code** - Clean architecture, error handling, performance optimization
-- **Cross-Platform** - Works on macOS, Linux, Windows with Node.js 14+
-
-## Architecture
-
-┌─────────────────────────────────────────────────────┐
-│ Browser (Client) │
-│ ┌──────────────────────────────────────────────┐ │
-│ │ Canvas Heatmap Renderer (HTML5 Canvas API) │ │
-│ │ - Color interpolation (blue → red gradient) │ │
-│ │ - 1m x 1m grid resolution │ │
-│ │ - Real-time updates @ 60 FPS │ │
-│ └──────────────────────────────────────────────┘ │
-│ ┌──────────────────────────────────────────────┐ │
-│ │ Interactive Dashboard │ │
-│ │ - Transmitter/receiver info │ │
-│ │ - Live statistics (RSSI min/max/avg) │ │
-│ │ - Control panel (pause/reset) │ │
-│ └──────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-WebSocket (500ms, real-time)
-↕
-┌─────────────────────────────────────────────────────┐
-│ Node.js Server (Backend) │
-│ ┌──────────────────────────────────────────────┐ │
-│ │ RF Source Simulator │ │
-│ │ - 4 transmitters with velocity vectors │ │
-│ │ - Position updates with boundary wrapping │ │
-│ │ - Configurable TX power (5-20 dBm) │ │
-│ └──────────────────────────────────────────────┘ │
-│ ┌──────────────────────────────────────────────┐ │
-│ │ Path Loss Propagation Model │ │
-│ │ - RSSI = TxPower - 20*log10(dist) - fading │ │
-│ │ - Grid-based calculation (300 points) │ │
-│ │ - Random environmental effects │ │
-│ └──────────────────────────────────────────────┘ │
-│ ┌──────────────────────────────────────────────┐ │
-│ │ WebSocket Server (ws library) │ │
-│ │ - 2 Hz broadcast rate (500ms interval) │ │
-│ │ - Automatic client connection management │ │
-│ │ - JSON data protocol │ │
-│ └──────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-
-## Installation & Setup
-
-### Requirements
-
-- **Node.js** 14.0 or higher ([download](https://nodejs.org/))
-- **npm** 6.0 or higher (included with Node.js)
-- **Modern web browser** (Chrome, Firefox, Safari, Edge)
-
-### Quick Start
-
-```bash
-# Clone and navigate to project
-git clone https://github.com/0xsan7/spectrum-mapper.git
-cd spectrum-mapper
-
-# Install dependencies
-npm install
-
-# Start the server
-npm start
-```
-
-The server will start on `http://localhost:3000`
-
-Open your browser and navigate to: **http://localhost:3000**
-
-## Usage Guide
-
-### Dashboard Interface
-
-**Heatmap View (Main Panel)**
-
-- Colored grid showing RF signal intensity across 20m × 15m space
-- Grid resolution: 1m × 1m cells
-- Color scale: Blue (weak -100 dBm) → Red (strong -20 dBm)
-- Magenta dots: RF transmitter positions
-- Green squares: Receiver node positions
-
-**Signal Intensity Zones**
--100 to -75 dBm → Blue (Weak signal)
--75 to -50 dBm → Green (Moderate signal)
--50 to -35 dBm → Yellow (Strong signal)
--35 to -20 dBm → Orange (Very strong)
-**Control Panel (Right Sidebar)**
-
-- **Transmitters** - Lists all RF sources with position and power
-- **Receivers** - Shows fixed monitoring node positions
-- **Statistics** - Max/Min/Average RSSI and hotspot count
-- **Controls** - Pause/Resume simulation, Reset to initial state
-
-### Keyboard Shortcuts
-
-| Key     | Action                  |
-| ------- | ----------------------- |
-| `Space` | Pause/Resume simulation |
-| `R`     | Reset dashboard         |
-| `?`     | Show help               |
-
-## Technical Specifications
-
-### Simulation Parameters
-
-| Parameter         | Value           |
-| ----------------- | --------------- |
-| Room Dimensions   | 20m × 15m       |
-| Grid Resolution   | 1m × 1m cells   |
-| Update Rate       | 2 Hz (500ms)    |
-| RSSI Range        | -100 to -20 dBm |
-| Total Grid Points | 300 cells       |
-
-### RF Transmitters
-
-| Source               | Power  | Type      | Behavior                |
-| -------------------- | ------ | --------- | ----------------------- |
-| TX-1 (Router A)      | 20 dBm | WiFi      | Stationary (2, 13)      |
-| TX-2 (Router B)      | 15 dBm | WiFi      | Stationary (18, 13)     |
-| TX-3 (Mobile Device) | 10 dBm | Personal  | Mobile with velocity    |
-| TX-4 (BLE Beacon)    | 5 dBm  | Bluetooth | Mobile with random walk |
-
-### Receiver Nodes
-
-| Node | Position | Type         |
-| ---- | -------- | ------------ |
-| RX-1 | (2, 2)   | Corner       |
-| RX-2 | (18, 2)  | Corner       |
-| RX-3 | (10, 13) | Back wall    |
-| RX-4 | (10, 2)  | Front center |
-
-### Performance Metrics
-
-- **Heatmap Generation**: ~50ms
-- **WebSocket Broadcast**: ~20ms
-- **Canvas Rendering**: ~30ms
-- **Total Cycle Time**: 500ms (2 Hz)
-- **End-to-End Latency**: 250-300ms
-- **Memory Usage**: ~50-100 MB
-
-## Project Structure
-
-spectrum-mapper/
-├── server.js # Main server + WebSocket + simulation loop
-├── simulation.js # RF source position updates
-├── pathLoss.js # RSSI calculation using path loss model
-├── heatmap.js # Heatmap grid generation + statistics
-├── config/
-│ └── constants.js # Simulation parameters + RF definitions
-├── public/
-│ ├── index.html # Dashboard HTML structure
-│ ├── style.css # Dark theme styling (responsive)
-│ ├── dashboard.js # Main application logic
-│ ├── websocket.js # WebSocket client connection
-│ ├── heatmap.js # Canvas rendering pipeline
-│ ├── colors.js # Color interpolation algorithm
-│ ├── performance.js # Performance utilities
-│ ├── logger.js # Error handling + logging
-│ ├── responsive.js # Mobile responsiveness
-│ ├── shortcuts.js # Keyboard shortcuts
-│ └── export.js # Data export functionality
-├── package.json # Dependencies
-├── README.md # This file
-└── .gitignore # Git ignore patterns
-
-## Technical Stack
-
-### Backend
-
-- **Node.js** - JavaScript runtime
-- **Express.js** - HTTP server framework
-- **WebSocket (ws)** - Real-time bidirectional communication
-- **Pure JavaScript** - No additional dependencies for simulation
-
-### Frontend
-
-- **HTML5** - Semantic markup
-- **CSS3** - Responsive dark theme styling
-- **Canvas API** - High-performance graphics rendering
-- **Vanilla JavaScript** - No frameworks (lightweight, fast)
-- **WebSocket API** - Real-time data streaming
-
-## Dependencies
-
-```json
-{
-  "express": "^4.18.2", // HTTP server
-  "ws": "^8.14.2" // WebSocket library
-}
-```
-
-Total: 70 packages (including transitive dependencies)
-
-## What You'll Learn
-
-### 1. RF/Wireless Concepts
-
-- Free-space path loss propagation model
-- RSSI (Received Signal Strength Indicator) calculation
-- Signal attenuation over distance
-- Environmental fading effects
-- Multi-path propagation simulation
-
-### 2. Real-Time Systems
-
-- WebSocket bi-directional communication
-- Event-driven architecture
-- Real-time data streaming at 2 Hz
-- Automatic reconnection handling
-- Connection pooling
-
-### 3. Data Visualization
-
-- Canvas API performance optimization
-- Color interpolation algorithms (linear mapping)
-- Grid-based spatial data rendering
-- Real-time animation at 60 FPS
-- Responsive layout design
-
-### 4. IoT Architecture
-
-- Distributed sensor mesh networks
-- Fixed monitoring nodes with mobile transmitters
-- Centralized data aggregation
-- Scalable system design patterns
-- Simulation vs. real hardware
-
-### 5. Full-Stack Development
-
-- Node.js backend architecture
-- Frontend rendering pipeline
-- Client-server communication patterns
-- Error handling and logging
-- Production-ready code quality
-
-## API Reference
-
-### Server Endpoints
-
-**GET /** - Serves static files from `/public` directory
-
-### WebSocket Events
-
-**Server → Client (every 500ms)**
-
-```json
-{
-  "timestamp": "2024-07-11T22:30:00.000Z",
-  "heatmap": [
-    { "x": 0, "y": 0, "rssi": -85.5 },
-    ...
-  ],
-  "sources": [
-    { "id": "TX-1", "name": "Router A", "x": 2, "y": 13, "txPower": 20 },
-    ...
-  ],
-  "receivers": [
-    { "id": "RX-1", "x": 2, "y": 2 },
-    ...
-  ],
-  "stats": {
-    "maxRSSI": "-20.5",
-    "minRSSI": "-98.2",
-    "avgRSSI": "-65.3",
-    "hotspotCount": 42
-  },
-  "roomWidth": 20,
-  "roomHeight": 15
-}
-```
-
-## Performance Optimization
-
-The system is optimized for real-time performance:
-
-- **Grid Caching** - Pre-calculated cell positions
-- **Binary Search** - RSSI lookups in O(log n)
-- **RequestAnimationFrame** - Smooth 60 FPS rendering
-- **WebSocket Batching** - Single broadcast per update cycle
-- **Memory Pooling** - Reusable canvas buffers
-
-## Future Enhancements
-
-### Phase 2 (Advanced Visualization)
-
-- [ ] 3D heatmap with Three.js
-- [ ] Historical RSSI time series graphs
-- [ ] Source movement trails
-- [ ] Animated signal propagation
-- [ ] Export heatmap as PNG/PDF
-
-### Phase 3 (Real Hardware)
-
-- [ ] ESP32 firmware integration
-- [ ] LoRa mesh network support
-- [ ] MQTT broker connectivity
-- [ ] Multi-room deployment
-- [ ] Cloud data storage
-
-### Phase 4 (Production)
-
-- [ ] Mobile app (React Native)
-- [ ] User authentication
-- [ ] Database persistence
-- [ ] Outdoor WiFi mapping
-- [ ] Advanced ML predictions
-
-## Troubleshooting
-
-**Problem: Server won't start**
-
-```bash
-# Check if port 3000 is already in use
-lsof -i :3000
-
-# Use different port
-PORT=3001 npm start
-```
-
-**Problem: Dashboard not loading**
-
-- Clear browser cache (Cmd+Shift+R on macOS)
-- Check browser console for errors (F12)
-- Verify WebSocket connection in Network tab
-
-**Problem: Heatmap not updating**
-
-- Check server console for errors
-- Verify WebSocket status shows "Connected"
-- Try refreshing the page
-
-## Contributing
-
-This is a complete project. Feel free to fork and extend with:
-
-- Real hardware integration
-- Advanced visualizations
-- Additional RF models
-- Performance improvements
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Author
-
-Santiago Jerald (@0xsan7)
+<!--
+Hero placeholder: see docs/README-hero.md for how to record and drop in a real
+GIF. Kept as a visible gap rather than an image of nothing.
+-->
+<p align="center">
+  <img src="docs/hero-placeholder.svg" alt="Demo coming: this placeholder stands in for a recording that has not been made yet. See docs/README-hero.md." width="760">
+</p>
+
+<h1 align="center">Spectrum Mapper</h1>
+
+<p align="center">
+  Interactive 2.4 GHz RF coverage simulator, with position estimation from RSSI.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#performance">Measured performance</a> ·
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/0xsan7/spectrum-mapper/actions/workflows/ci.yml">
+    <img src="https://github.com/0xsan7/spectrum-mapper/actions/workflows/ci.yml/badge.svg" alt="CI: lint, format, test, dependency audit" height="20">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licensed" height="20">
+  </a>
+  <a href="#performance">
+    <img src="https://img.shields.io/badge/frame%20cost-0.5%20ms-informational" alt="Measured frame cost: 0.5 ms. See the performance section for the benchmark that produced it." height="20">
+  </a>
+  <img src="https://img.shields.io/badge/node-%3E%3D18-5FA04E" alt="Requires Node 18 or newer" height="20">
+  <img src="https://img.shields.io/badge/runtime%20deps-express%2C%20ws-5FA04E" alt="Two runtime dependencies" height="20">
+</p>
 
 ---
 
-**Status**: Production-Ready MVP (v1.0.0)  
-**Last Updated**: July 2024  
-**Commits**: 18 (3-day sprint)  
-**Lines of Code**: ~1200 (backend + frontend)
+## What it does
 
-Made with JavaScript for IoT enthusiasts and engineers.
+A browser map of a 20 × 15 m room showing where 2.4 GHz signal actually lands,
+driven by a real log-distance path loss model rather than a decorative
+gradient. Move the transmitters, draw walls, turn the propagation knobs, and
+watch four receivers try to work out where the mobile device is.
+
+- **Coverage heatmap** over a 1 m grid, with a dBm legend and a hover readout
+- **Drag and drop** for transmitters and receivers; double-click a transmitter
+  to release it back into motion
+- **Live model controls** — path loss exponent, carrier frequency, fading
+- **Wall obstacles** with per-wall dB attenuation, casting real shadows on the
+  grid
+- **Trilateration** of the mobile transmitter, with the estimate drawn against
+  the true position and the error in metres
+- **RSSI and error time series**, plus movement trails
+- **Export** the map as PNG, or the data as CSV/JSON over HTTP
+
+## Quick start
+
+Requires Node 18 or newer.
+
+```sh
+git clone https://github.com/0xsan7/spectrum-mapper.git
+cd spectrum-mapper
+npm install
+npm start
+```
+
+Open <http://localhost:3000>.
+
+```sh
+npm run dev     # restart on file changes
+npm test        # 97 tests, no watch mode
+npm run lint    # eslint
+npm run format  # prettier --write
+```
+
+Or in Docker:
+
+```sh
+docker build -t spectrum-mapper .
+docker run --rm -p 3000:3000 spectrum-mapper
+```
+
+### Controls
+
+| Action                         | How                             |
+| ------------------------------ | ------------------------------- |
+| Move a transmitter or receiver | Drag it                         |
+| Release a pinned transmitter   | Double-click it                 |
+| Draw a wall                    | Press `W`, then drag on the map |
+| Remove all walls               | `Clear walls` in the sidebar    |
+| Pause / resume                 | `Space` or the Pause button     |
+| Reset everything               | `R`                             |
+| Cycle map mode                 | `M`                             |
+
+### Configuration
+
+Every value has a default, so the app runs with no `.env` at all. Copy
+`.env.example` to `.env` to change any of them:
+
+| Variable                     | Default        | Meaning                                |
+| ---------------------------- | -------------- | -------------------------------------- |
+| `PORT`                       | `3000`         | HTTP port                              |
+| `HOST`                       | `0.0.0.0`      | Bind address                           |
+| `ROOM_WIDTH` / `ROOM_HEIGHT` | `20` / `15`    | Room size in metres                    |
+| `GRID_RESOLUTION`            | `1`            | Metres per heatmap cell                |
+| `UPDATE_RATE`                | `500`          | Milliseconds between frames            |
+| `HISTORY_CAPACITY`           | `240`          | Samples kept in the time-series buffer |
+| `MIN_RSSI` / `MAX_RSSI`      | `-100` / `-20` | Display range in dBm                   |
+
+Real process environment variables take precedence over `.env`.
+
+## The model
+
+Path loss is a standard log-distance model:
+
+```
+PL(d) = PL(d0) + 10 · n · log10(d / d0)
+```
+
+with `PL(d0) = 20 · log10(4π · d0 · f / c)` — the free-space loss at the
+reference distance `d0 = 1 m`. The exponent `n`, the frequency `f`, and the
+fading magnitude are all adjustable at runtime. Distance is clamped to a
+minimum so `log10` is never evaluated at or below zero, and `n = 2` free space
+reproduces the textbook `31.5 dB` at 900 MHz and `40.0 dB` at 2.4 GHz.
+
+Sources combine in **linear power**, not by averaging dBm. Averaging dBm is
+arithmetically meaningless, and it made the previous version report a cell
+_above_ its own transmitter's power.
+
+Walls are line segments with a thickness. A path only picks up a wall's
+attenuation when it genuinely crosses it, and crossed walls sum.
+
+### Position estimation
+
+Each receiver's RSSI is inverted back to a range, then those ranges are fitted
+for position. Rather than intersecting circles, the reference receiver's
+equation is subtracted from the others to cancel the quadratic terms, leaving
+a 2 × 2 linear system solved in closed form. Circle intersection is avoided
+because with fading and walls the circles generally do not meet at a single
+point, so "pick the best pair" would be arbitrary.
+
+It degrades honestly rather than guessing:
+
+| Receivers            | Behaviour                                                                                                                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3 or more            | Least-squares fit, unique                                                                                                                                                                                                |
+| Exactly 2            | The normal equations are rank-1, so the geometry is solved directly instead. Two circles meet in up to two mirrored points; both are returned, the fit is flagged ambiguous, and the UI draws the other candidate hollow |
+| 1, or all coincident | No solution, reported as such                                                                                                                                                                                            |
+| Collinear            | Flagged degenerate instead of dividing by ~0                                                                                                                                                                             |
+
+Readings at or below the noise floor become `NaN` and are dropped from the fit
+rather than treated as zero range. Estimates are clamped to the room, since the
+target is known to be inside and an estimate outside it is definitely wrong.
+
+The error in metres is computed **server-side**, because it needs the true
+position, which only the server has. The browser is shown the result and never
+the truth it was compared against.
+
+## Architecture
+
+```
+                      ┌──────────────────────────────────────────┐
+   browser            │  Node / Express 5 + ws                   │
+  ┌──────────────┐    │                                          │
+  │ dashboard.js │◄───┼─ WebSocket  full frame at UPDATE_RATE     │
+  │ heatmap.js   │    │        (one snapshot on connect, then     │
+  │ chart.js     │    │         deltas)                          │
+  │ controls.js  │    │                                          │
+  │ interaction  │    │  ┌────────────────────────────────────┐  │
+  │ export.js    │    │  │ updateSimulation()                 │  │
+  └──────┬───────┘    │  │  simulation.updatePositions()      │  │
+         │            │  │  HeatmapGenerator.generate()       │  │
+         │ commands   │  │  locateTrackedSource()  ────────────┼──┼─► trilateration.js
+         │ (drag,     │  │  History.push()        ────────────┼──┼─► history.js
+         │  sliders,  │  └────────────────────────────────────┘  │
+         │  walls)    │                                          │
+         └───────────►│  command handlers validate every message  │
+         WebSocket    └──────────────────────────────────────────┘
+```
+
+| Module                 | Responsibility                                          |
+| ---------------------- | ------------------------------------------------------- |
+| `src/server.js`        | HTTP + WebSocket, state ownership, command validation   |
+| `src/pathLoss.js`      | Log-distance model, dBm ↔ linear power, grid evaluation |
+| `src/heatmap.js`       | Grid generation and statistics                          |
+| `src/simulation.js`    | Transmitter positions, velocity, pinning                |
+| `src/obstacles.js`     | Wall geometry and per-crossing attenuation              |
+| `src/receivers.js`     | Receiver node state                                     |
+| `src/trilateration.js` | RSSI → range → position                                 |
+| `src/history.js`       | Rolling time-series buffer                              |
+| `src/csv.js`           | CSV formatting                                          |
+| `public/*`             | Canvas renderer, controls, chart, export                |
+
+The server owns the simulation. The browser sends intent — "move this", "set
+this parameter" — and renders the frames that come back. It never computes
+physics locally, so two browsers open at once cannot disagree.
+
+### API
+
+```
+GET  /api/summary                 rolling aggregates over the buffer
+GET  /api/export/timeseries.csv   one row per sample
+GET  /api/export/heatmap.csv      one row per grid cell
+GET  /api/export/readings.csv     per-receiver readings behind the estimate
+GET  /api/export/frame.json       the whole frame
+```
+
+## Performance
+
+All figures below come from `node scripts/benchmark.js` on this machine —
+Node v26.7.0, darwin/arm64, default configuration. Re-run it to reproduce;
+your numbers will differ.
+
+```
+Room 20x15 m at 1 m = 300 cells, 4 sources, 4 receivers
+
+Per-operation cost
+  calculateRSSI (per call)              0.24us mean     0.22us median     0.33us p95
+  pathLoss (per call)                   0.12us mean     0.11us median     0.18us p95
+  generateHeatmap (per frame)         501.46us mean   474.50us median   636.71us p95
+  calculateStats (per frame)           15.85us mean    13.67us median    22.38us p95
+  leastSquares (per call)               0.47us mean     0.45us median     0.82us p95
+
+Frame budget
+  full frame (heatmap + stats + trilateration): 0.518ms
+  configured update interval:                500ms
+  headroom:                                   966x
+  at 1.67us/cell, 500ms allows ~299,125 cells
+```
+
+Heatmap generation is essentially the whole frame's cost, and it scales
+linearly at about 1.7 µs per cell. The grid size is the limit, not the model.
+
+**Position error**, shipped receiver layout, 3 dB fading, 5000 positions
+sampled across the room: mean 4.71 m, median 4.91 m, p95 7.26 m, max 8.07 m.
+
+That average is dominated by positions far from the receivers, so the
+breakdown matters more than the headline:
+
+| Distance from room centre | Samples | Mean error |
+| ------------------------- | ------- | ---------- |
+| 0–2 m                     | 152     | 1.80 m     |
+| 2–4 m                     | 448     | 2.47 m     |
+| 4–6 m                     | 1033    | 3.64 m     |
+| 6+ m                      | 3367    | 5.46 m     |
+
+This is the expected shape: a fixed dB of fading is a _proportional_ range
+error, so a target 20 m from a receiver localises worse than one 8 m away. Near
+the middle of the default room the estimate is good to about 2 m.
+
+The error is entirely fading, not solver error. With fading disabled the fit is
+an exact algebraic inverse and the error is `0.0e+0 m` — which is exactly why
+fading is left **on** in the estimator. An earlier version set it to zero and
+reported a beautifully precise 0.00 m that measured nothing.
+
+Startup: `require('../src/server')` ≈ 77 ms. Two runtime dependencies, `express`
+and `ws`. The 300-cell heatmap serialises to about 8.3 KB; a live frame is
+~17 KB, sent at 2 Hz.
+
+## Testing
+
+97 tests on `node:test`, no test framework dependency.
+
+```sh
+npm test
+```
+
+They are written to fail when the behaviour is wrong, not merely to pass:
+
+- **The physics is anchored to the model, not to constants copied out of it.** A
+  known distance must round-trip through RSSI and back.
+- **The trilateration inverse is checked against exact geometry.** Reverting the
+  algebra to its earlier sign error made 15 of 28 tests fail.
+- **Degenerate cases are explicit** — 1 receiver, coincident receivers,
+  collinear receivers, readings below the noise floor.
+- **The bandwidth invariant is measured.** A test fills the history buffer and
+  asserts a live frame is at least 3× smaller than the same frame carrying
+  everything. The bug that motivated it — an index-based delta cursor that
+  silently froze the chart after two minutes — was caught by a test asserting
+  one sample per frame at capacity, not by reading the code.
+- **CSV header and row order are checked against each other**, after a real bug
+  paired every heatmap cell with the wrong transmitter's coordinates.
+
+Browser-side logic (the colour ramp, legend, chart scaling) is unit tested by
+loading the real files into a VM context, so the tests exercise the shipped code
+rather than a copy of it.
+
+## Known limitations
+
+- **The heatmap is a simulation, not a measurement.** It models one log-distance
+  path; real rooms have reflections, shadowing, and material variation. Treat it
+  as an educational model, not a site survey tool.
+- **"Error in metres" is only meaningful against a simulated truth.** The server
+  knows where the transmitter actually is because it is the one moving it. A real
+  deployment has no such ground truth and would need a different metric.
+- **Two receivers cannot disambiguate a mirrored position.** The tool shows both
+  candidates rather than pretending to know which is right.
+- **The grid is recomputed from scratch every frame.** Fine at 300 cells
+  (0.5 ms), but it is O(cells × sources) and is the first thing that would need a
+  spatial index at a much finer resolution.
+- **No persistence.** Reloading loses walls, positions, and history.
+- **No authentication.** It binds `0.0.0.0` by default and every client can move
+  everything. Fine for a local tool; do not expose it to a network you do not
+  control.
+
+## Roadmap
+
+Roughly in the order I expect to do them.
+
+- [ ] **Persistence** — save and load room layouts, walls, and positions
+- [ ] **Add and remove receivers**, since the estimator's behaviour is so
+      sensitive to their geometry
+- [ ] **Spatially coherent fading** — the current fading is per measurement, so it
+      does not produce the smooth structure a real multipath field has
+- [ ] **Obstacle library** — prebuilt wall types with realistic dB values
+      (brick, concrete, drywall, glass) instead of a bare attenuation number
+- [ ] **Fingerprinting mode** — walk a known path, record the RSSI curve, and
+      compare a later walk against it
+- [ ] **Faster grid** — spatial partitioning so resolution can go well past 1 m
+      without the frame budget moving
+- [ ] **Recorded demo GIF** — replacing the placeholder at the top
+- [ ] **A real accuracy metric** for when there is no simulated truth
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes to the physics model need a test
+that fails before the change and passes after — the note there explains why.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
