@@ -45,6 +45,11 @@ jobs:
         # a test count that has drifted from the suite.
         run: npm run verify:readme
 
+      - name: Verify diagram assets
+        # Well-formed XML, no scripts, no external references, and the file
+        # tree and banner counts still matching the working tree.
+        run: npm run verify:diagrams
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
