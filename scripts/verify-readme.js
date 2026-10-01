@@ -118,28 +118,73 @@ for (const file of [
 // describes a past run of an earlier suite, and failing on that would be
 // wrong. So: a number that is not part of "N of M", and not adjacent to
 // words like "fail" or "passed".
-const testingSection =
-  (readme.match(/^## Testing\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+// Where a hard-coded suite count could hide. This used to read a "## Testing"
+// section, which no longer exists on the front page - and matching a section
+// that is not there yields an empty string, which no regex can match, which
+// made the check pass by finding nothing. So it scans the whole README plus
+// every split-out document instead, and keys off no section name at all.
+const countScopes = [['README.md', readme], ...Object.entries(DOCS)];
 // Every `sh` block, not just the first: the first one is the clone
 // instructions, and the npm command block is a different one further down.
 const shBlocks = [...readme.matchAll(/^```sh[\s\S]*?^```/gm)].map((m) => m[0]);
+// A number that is not part of "N of M", and not adjacent to words like
+// "fail" or "passed". Those two shapes describe a past run of an earlier suite,
+// and failing on them would be wrong.
 const countIsAClaim = (s) =>
   [...s.matchAll(/^.*?\b\d+\s+tests?\b.*$/gm)].some(
     (line) =>
       !/\d+\s+of\s+\d+\s+tests?\b/.test(line) &&
       !/\b(fail|failed|pass|passed|broke|broken|green|red)\b/i.test(line)
   );
+const countOffenders = countScopes
+  .filter(([, body]) => countIsAClaim(body))
+  .map(([file]) => file);
 check(
-  'README does not hard-code a test count',
-  !countIsAClaim(testingSection) &&
-    shBlocks.every((block) => !countIsAClaim(block)),
-  'a number here goes stale on every commit that adds a test'
+  'no document hard-codes a test count',
+  countOffenders.length === 0 && shBlocks.every((b) => !countIsAClaim(b)),
+  countOffenders.length
+    ? `a bare number goes stale on every commit that adds a test: ${countOffenders.join(', ')}`
+    : ''
 );
 check(
   'the suite is described as running on node:test',
   /node:test/.test(readme) || /node:test/.test(testingDoc),
   'say how the suite is run, in the README summary or docs/testing.md'
 );
+/* ---- the Docs table ----
+ *
+ * Six documents, one row each, every target a real file. A table that quietly
+ * loses a row is worse than no table: the reader assumes the list is complete.
+ */
+const DOCS_TABLE = [
+  ['Model', 'docs/model.md'],
+  ['Architecture', 'docs/architecture.md'],
+  ['Performance', 'docs/performance.md'],
+  ['Testing', 'docs/testing.md'],
+  ['File tree', 'docs/tree.md'],
+  ['Changelog', 'CHANGELOG.md'],
+];
+const docsSection =
+  (readme.match(/^## Docs\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+check('README has a Docs section', docsSection.length > 0);
+for (const [label, target] of DOCS_TABLE) {
+  check(
+    `Docs table links ${label} to ${target}`,
+    docsSection.includes(`[${label}](${target})`)
+  );
+  check(`${target} exists`, exists(target));
+}
+check(
+  'Docs section links nothing else',
+  (docsSection.match(/\]\(([^)]+)\)/g) || []).length === DOCS_TABLE.length,
+  'every row must be one of the documents above'
+);
+check(
+  'the stub sections are gone',
+  !/^## (Testing|Performance)\b/m.test(readme),
+  'the Docs table replaced them'
+);
+
 check(
   'docs/testing.md describes the suite',
   /node:test/.test(testingDoc),

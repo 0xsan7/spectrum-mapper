@@ -12,7 +12,7 @@ recording exists. See docs/README-hero.md for how to record one.
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#performance">Measured performance</a> ·
+  <a href="#docs">Docs</a> ·
   <a href="#roadmap">Roadmap</a>
 </p>
 
@@ -118,8 +118,7 @@ RSSI = Tx - PL(d0) - 10·n·log10(d/d0) - walls - fading
 ```
 
 Transmit power, minus free-space loss at the reference distance, minus the
-distance-dependent growth, minus whatever the walls and fading take away. Full
-derivation in [docs/model.md](docs/model.md).
+distance-dependent growth, minus whatever the walls and fading take away.
 
 ## Architecture
 
@@ -142,15 +141,16 @@ version of this diagram.
 Every tracked file, one line and a comment each —
 [docs/tree.md](docs/tree.md). Regenerate with `npm run tree`.
 
-## Performance
+## Docs
 
-Measured per-operation cost and localisation accuracy on the author's machine —
-see [docs/performance.md](docs/performance.md).
-
-## Testing
-
-The suite runs on `node:test` with no framework dependency — see
-[docs/testing.md](docs/testing.md).
+| Document                             | What is in it                                            |
+| ------------------------------------ | -------------------------------------------------------- |
+| [Model](docs/model.md)               | The path-loss law, wall attenuation and fading, derived  |
+| [Architecture](docs/architecture.md) | Module responsibilities, the HTTP API, Mermaid diagram   |
+| [Performance](docs/performance.md)   | Measured cost and accuracy on the author's machine       |
+| [Testing](docs/testing.md)           | How the suite is structured and what each check protects |
+| [File tree](docs/tree.md)            | Every tracked file, generated                            |
+| [Changelog](CHANGELOG.md)            | Release notes and the bugs fixed in each                 |
 
 ## Known limitations
 
@@ -187,11 +187,6 @@ Roughly in the order I expect to do them.
       without the frame budget moving
 - [ ] **Recorded demo GIF** — an actual capture of the app, none exists yet
 - [ ] **A real accuracy metric** for when there is no simulated truth
-
-## Changelog
-
-Release notes and the full list of fixes live in
-[CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
