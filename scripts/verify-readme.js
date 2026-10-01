@@ -44,6 +44,37 @@ function check(label, ok, detail) {
 
 console.log('README claims vs reality');
 
+/* ---- the screenshot the README shows ----
+ *
+ * The README embeds docs/screenshot.png. A missing file renders as a broken
+ * image, which is exactly the "implies something exists that does not" problem
+ * the hero placeholder was deleted for, so this has to be a hard failure.
+ */
+const SCREENSHOT = 'docs/screenshot.png';
+check(
+  'README embeds docs/screenshot.png',
+  new RegExp(`<img src="${SCREENSHOT.replace(/\//g, '\\/')}"[^>]*>`).test(
+    readme
+  )
+);
+check(
+  `${SCREENSHOT} exists`,
+  exists(SCREENSHOT),
+  'the README references it; see docs/README-hero.md for how to capture one'
+);
+if (exists(SCREENSHOT)) {
+  const abs = path.join(ROOT, SCREENSHOT);
+  const bytes = fs.readFileSync(abs);
+  // read() above returns utf8 text, so the PNG signature has to be read as
+  // bytes - asking a string for .subarray() throws and takes the verifier down
+  // with it instead of reporting a failure.
+  check(
+    `${SCREENSHOT} is a non-empty PNG`,
+    bytes.length > 8 && bytes.subarray(1, 4).toString('latin1') === 'PNG',
+    `${bytes.length} bytes, or no PNG signature`
+  );
+}
+
 /* ---- load the split-out docs, failing loudly if any is absent ---- */
 for (const file of Object.keys(DOCS)) {
   if (!exists(file)) {
@@ -87,28 +118,73 @@ for (const file of [
 // describes a past run of an earlier suite, and failing on that would be
 // wrong. So: a number that is not part of "N of M", and not adjacent to
 // words like "fail" or "passed".
-const testingSection =
-  (readme.match(/^## Testing\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+// Where a hard-coded suite count could hide. This used to read a "## Testing"
+// section, which no longer exists on the front page - and matching a section
+// that is not there yields an empty string, which no regex can match, which
+// made the check pass by finding nothing. So it scans the whole README plus
+// every split-out document instead, and keys off no section name at all.
+const countScopes = [['README.md', readme], ...Object.entries(DOCS)];
 // Every `sh` block, not just the first: the first one is the clone
 // instructions, and the npm command block is a different one further down.
 const shBlocks = [...readme.matchAll(/^```sh[\s\S]*?^```/gm)].map((m) => m[0]);
+// A number that is not part of "N of M", and not adjacent to words like
+// "fail" or "passed". Those two shapes describe a past run of an earlier suite,
+// and failing on them would be wrong.
 const countIsAClaim = (s) =>
   [...s.matchAll(/^.*?\b\d+\s+tests?\b.*$/gm)].some(
     (line) =>
       !/\d+\s+of\s+\d+\s+tests?\b/.test(line) &&
       !/\b(fail|failed|pass|passed|broke|broken|green|red)\b/i.test(line)
   );
+const countOffenders = countScopes
+  .filter(([, body]) => countIsAClaim(body))
+  .map(([file]) => file);
 check(
-  'README does not hard-code a test count',
-  !countIsAClaim(testingSection) &&
-    shBlocks.every((block) => !countIsAClaim(block)),
-  'a number here goes stale on every commit that adds a test'
+  'no document hard-codes a test count',
+  countOffenders.length === 0 && shBlocks.every((b) => !countIsAClaim(b)),
+  countOffenders.length
+    ? `a bare number goes stale on every commit that adds a test: ${countOffenders.join(', ')}`
+    : ''
 );
 check(
   'the suite is described as running on node:test',
   /node:test/.test(readme) || /node:test/.test(testingDoc),
   'say how the suite is run, in the README summary or docs/testing.md'
 );
+/* ---- the Docs table ----
+ *
+ * Six documents, one row each, every target a real file. A table that quietly
+ * loses a row is worse than no table: the reader assumes the list is complete.
+ */
+const DOCS_TABLE = [
+  ['Model', 'docs/model.md'],
+  ['Architecture', 'docs/architecture.md'],
+  ['Performance', 'docs/performance.md'],
+  ['Testing', 'docs/testing.md'],
+  ['File tree', 'docs/tree.md'],
+  ['Changelog', 'CHANGELOG.md'],
+];
+const docsSection =
+  (readme.match(/^## Docs\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+check('README has a Docs section', docsSection.length > 0);
+for (const [label, target] of DOCS_TABLE) {
+  check(
+    `Docs table links ${label} to ${target}`,
+    docsSection.includes(`[${label}](${target})`)
+  );
+  check(`${target} exists`, exists(target));
+}
+check(
+  'Docs section links nothing else',
+  (docsSection.match(/\]\(([^)]+)\)/g) || []).length === DOCS_TABLE.length,
+  'every row must be one of the documents above'
+);
+check(
+  'the stub sections are gone',
+  !/^## (Testing|Performance)\b/m.test(readme),
+  'the Docs table replaced them'
+);
+
 check(
   'docs/testing.md describes the suite',
   /node:test/.test(testingDoc),
@@ -283,8 +359,12 @@ check(
   readme.includes('docs/README-hero.md')
 );
 check(
-  'README embeds no demo image',
-  !/<img[^>]+src="[^"]*\.(gif|png|webp|mov|mp4)"/i.test(readme),
+  // A screenshot is not a recording. docs/screenshot.png is a still capture of
+  // the dashboard and is honest about what it is; what must not appear is
+  // anything that reads as a demo having been captured - an animated GIF or
+  // video, since none has been recorded.
+  'README embeds no demo animation',
+  !/<img[^>]+src="[^"]*\.(gif|webp|mov|mp4)"/i.test(readme),
   'no recording has been made; do not imply otherwise'
 );
 check(
@@ -427,11 +507,15 @@ if (arch) {
     formulaRe.test(formula(archDoc)),
     'the fallback must match the diagram'
   );
-  // There is deliberately no "README states the formula" check. The front
-  // page's model section is a two-line summary that links to docs/model.md;
-  // there is no formula on it to drift. The two places that do state the
-  // expression - docs/model.md and docs/architecture.md - are each checked
-  // against the diagram above.
+  // The front page states the formula itself, in a fenced block under "The
+  // model", so it is checked against the diagram like every other copy. An
+  // earlier revision of this branch had no formula on the front page and no
+  // check either; this one came back when the formula did.
+  check(
+    'README model section states the full formula',
+    formulaRe.test(formula(readme)),
+    'the fenced formula must match the diagram'
+  );
   check(
     'docs/model.md derives the same expression',
     formulaRe.test(formula(modelDoc)),
@@ -613,6 +697,51 @@ if (!block) {
       `computed bands: ${[...bandMeans].join(', ')} m`
     );
   }
+
+  /* ---- the front page's headline accuracy figures ----
+   *
+   * The features list claims "about 1.8 m near the centre and 5.5 m at the
+   * edges". Those are the first and last distance bands - errors bucketed by
+   * how far the target was from the middle of the room, which is what
+   * localisation-errors.js computes. "About" means the claim is checked at the
+   * precision it is written to: 1.8 against 1.80 exactly, 5.5 against 5.46
+   * rounded to one decimal. Comparing to full precision would fail on a figure
+   * that is correct as written, and comparing loosely would pass on a wrong one.
+   */
+  const centre = acc.bands[0];
+  const edge = acc.bands[acc.bands.length - 1];
+  // Matched against a whitespace-flattened copy: Prettier wraps this bullet
+  // between "at" and "the edges", and a pattern spanning that break never
+  // matches however correct the text is.
+  const flat = readme.replace(/\s+/g, ' ');
+  const claim = (() => {
+    const m = flat.match(
+      /Localises the mobile transmitter to about ([\d.]+) m near the centre and ([\d.]+) m at the edges/i
+    );
+    return m ? { centre: Number(m[1]), edge: Number(m[2]) } : null;
+  })();
+  check(
+    'README states the centre and edge accuracy figures',
+    claim !== null,
+    'expected "about X m near the centre and Y m at the edges"'
+  );
+  if (claim) {
+    check(
+      `centre figure: README ${claim.centre} m vs computed ${centre.mean.toFixed(1)} m`,
+      Math.abs(claim.centre - centre.mean) < 0.05,
+      `computed ${centre.mean.toFixed(2)} m over ${centre.n} samples 0-${centre.hi} m from the centre`
+    );
+    check(
+      `edge figure: README ${claim.edge} m vs computed ${edge.mean.toFixed(1)} m`,
+      Math.abs(claim.edge - edge.mean) < 0.05,
+      `computed ${edge.mean.toFixed(2)} m over ${edge.n} samples ${edge.lo}-${edge.hi} m from the centre`
+    );
+    check(
+      'the accuracy claim names its conditions',
+      /simulated/i.test(flat) && /3\s*dB fading/i.test(flat),
+      'say it is simulated and name the fading'
+    );
+  }
 }
 
 /* ---- the supported Node range must agree everywhere it is stated ----
@@ -621,6 +750,211 @@ if (!block) {
  * together: the badge said >=18, engines said >=18, and CI actually ran 20.
  * Check the lowest version in the CI matrix against engines, and the README
  * against engines, so they cannot drift apart again. */
+/* ---- the bind address, in all four places it is stated ----
+ *
+ * constants.js, .env.example, the README table and the README limitations
+ * bullet are four statements of one security-relevant default. They agreed
+ * before this change; nothing held them together. The test suite covers each
+ * of them too - this check exists so the README table cannot drift from the
+ * code on its own, the way the Node badge did.
+ */
+{
+  const constants = fs.readFileSync(
+    path.join(ROOT, 'src/config/constants.js'),
+    'utf8'
+  );
+  const hostMatch = constants.match(
+    /HOST:\s*process\.env\.HOST\s*\|\|\s*'([^']+)'/
+  );
+  const defaultHost = hostMatch ? hostMatch[1] : null;
+  check(
+    'constants.js declares a HOST default',
+    defaultHost !== null,
+    "expected HOST: process.env.HOST || '<address>'"
+  );
+  if (defaultHost) {
+    // Built by locating the row and reading the cell, rather than by matching
+    // a pattern full of backticks: nesting those inside a template literal is
+    // where this went wrong once.
+    const hostRow = readme.split('\n').find((l) => /^\|\s*.HOST./.test(l));
+    check(
+      `README config table has a HOST row`,
+      hostRow !== undefined,
+      'the configuration table should list HOST'
+    );
+    if (hostRow !== undefined) {
+      const cell = hostRow
+        .split('|')
+        .map((c) => c.trim().replace(/^[`]+|[`]+$/g, ''))
+        .find((c) => c && c !== 'HOST' && c !== 'Default' && c !== 'Meaning');
+      check(
+        `README config table shows the HOST default (${defaultHost})`,
+        cell === defaultHost,
+        `the table says ${cell}, src/config/constants.js says ${defaultHost}`
+      );
+    }
+
+    const escaped = defaultHost.replace(/\./g, '\\.');
+    check(
+      `.env.example shows the HOST default (${defaultHost})`,
+      new RegExp(`^HOST=${escaped}$`, 'm').test(read('.env.example')),
+      'a stale .env.example silently overrides the new default'
+    );
+
+    // The bullet has to describe the default that is actually in force, and
+    // still say how to opt out of it.
+    const stated = (readme.match(/binds `([\d.]+)` by default/) || [])[1];
+    check(
+      `limitations bullet names the HOST default (${defaultHost})`,
+      stated === defaultHost,
+      stated
+        ? `the bullet says ${stated}, the code says ${defaultHost}`
+        : 'no "binds `<address>` by default" in the limitations'
+    );
+    check(
+      'limitations bullet still says how to expose it',
+      readme.includes(
+        `HOST=${defaultHost === '127.0.0.1' ? '0.0.0.0' : defaultHost}`
+      ),
+      'the change is only defensible if the escape hatch is documented'
+    );
+
+    // The image has to opt in, or `docker run -p 3000:3000` connects to nothing.
+    //
+    // Matched against the ENV instruction rather than the bare string: a
+    // `/HOST=0\.0\.0\.0/` test also matches a comment saying the value used to
+    // be there, which is precisely the case worth catching. Reinstating it as
+    // prose is how the setting silently disappears.
+    const dockerfile = read('Dockerfile');
+    // ENV spans continuation lines:
+    //   ENV NODE_ENV=production \
+    //       PORT=3000 \
+    //       HOST=0.0.0.0
+    // so collect the instruction plus every line the previous one continues
+    // into, then split it into KEY=VALUE pairs. A single regex over the raw
+    // text stops at the first backslash, which silently drops HOST.
+    const envPairs = (() => {
+      const lines = dockerfile.split('\n');
+      const start = lines.findIndex((l) => /^ENV\s/.test(l));
+      if (start === -1) return [];
+      const block = [lines[start].replace(/^ENV\s+/, '')];
+      for (let k = start + 1; k < lines.length; k++) {
+        if (!/\\\s*$/.test(lines[k - 1])) break;
+        block.push(lines[k]);
+      }
+      return block
+        .join(' ')
+        .replace(/\\/g, ' ')
+        .split(/\s+/)
+        .map((p) => p.replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+    })();
+    const envHost = envPairs.find((p) => p.startsWith('HOST='));
+    check(
+      'the Dockerfile has an ENV instruction',
+      envPairs.length > 0,
+      'expected an ENV block'
+    );
+    check(
+      'the Dockerfile ENV sets HOST=0.0.0.0',
+      envHost === 'HOST=0.0.0.0',
+      `ENV carries ${envHost || 'no HOST at all'}`
+    );
+    check(
+      'the Dockerfile ENV still sets PORT=3000',
+      envPairs.includes('PORT=3000'),
+      `ENV pairs: ${envPairs.join(', ')}`
+    );
+    // And the whole point: the code's own default must still be loopback, or
+    // this override is redundant and the safety came from somewhere else.
+    check(
+      'the code default is still loopback, so the override is load-bearing',
+      defaultHost === '127.0.0.1',
+      `CONFIG.HOST defaults to ${defaultHost}`
+    );
+  }
+}
+
+/* ---- the npm listing metadata ----
+ *
+ * package.json's description is what npm and GitHub show, and the README tagline
+ * is what a reader sees on the page. They describe the same project, so the
+ * README's key phrase has to appear in the description - otherwise the two
+ * drift and the registry says one thing while the repo says another.
+ *
+ * The URLs are checked too, because they are easy to get wrong in a way that
+ * still looks plausible: an ssh remote that does not exist, or a bugs URL
+ * pointing somewhere harmless.
+ */
+{
+  const meta = JSON.parse(read('package.json'));
+  const desc = (meta.description || '').trim();
+  check('package.json description is non-empty', desc.length > 20, desc);
+  check(
+    'package.json description mentions trilateration',
+    /trilateration/i.test(desc)
+  );
+
+  // The README's tagline, read from the centred line under the title.
+  const tagline =
+    (readme.match(/<p align="center">\s*([^<\n]+?)\s*<\/p>/) || [])[1] || '';
+  const keyPhrase = tagline.match(
+    /(\d+\.\d+\s*GHz\s+RF\s+coverage\s+simulator)/i
+  );
+  check(
+    'README has a tagline with the key phrase',
+    keyPhrase !== undefined,
+    tagline ? `tagline reads: ${tagline}` : 'no tagline found'
+  );
+  if (keyPhrase) {
+    check(
+      `package.json description carries the tagline phrase ("${keyPhrase[1]}")`,
+      desc.toLowerCase().includes(keyPhrase[1].toLowerCase()),
+      `description: ${desc}`
+    );
+  }
+
+  const repoUrl = meta.repository?.url || '';
+  const homepage = meta.homepage || '';
+  const bugs = meta.bugs?.url || '';
+  check('package.json has a repository URL', /spectrum-mapper/.test(repoUrl));
+  check(
+    'repository URL is a real https git URL',
+    /^git\+https:\/\/github\.com\/0xsan7\/spectrum-mapper(\.git)?$/.test(
+      repoUrl
+    ),
+    repoUrl
+  );
+  check(
+    'homepage points at the README',
+    homepage === 'https://github.com/0xsan7/spectrum-mapper#readme',
+    homepage
+  );
+  check(
+    'bugs URL is the issues page',
+    bugs === 'https://github.com/0xsan7/spectrum-mapper/issues',
+    bugs
+  );
+  check('package.json has an author', (meta.author || '').trim().length > 0);
+
+  const kws = meta.keywords || [];
+  check(
+    'package.json has keywords',
+    kws.length >= 10,
+    `${kws.length} keywords`
+  );
+  check(
+    'keywords are lower-case and hyphenated',
+    kws.every((k) => /^[a-z0-9-]+$/.test(k)),
+    kws.filter((k) => !/^[a-z0-9-]+$/.test(k)).join(', ')
+  );
+  // npm truncates a keywords list at 5 per field and this one fits, but a
+  // keyword the README never mentions is dead weight in the listing.
+  for (const k of ['rssi', 'heatmap', 'trilateration', 'path-loss']) {
+    check(`keyword "${k}" is used in the project`, kws.includes(k));
+  }
+}
+
 console.log('\nSupported Node versions');
 {
   const pkg = JSON.parse(read('package.json'));

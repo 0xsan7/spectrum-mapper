@@ -66,6 +66,7 @@ const DESCRIPTIONS = {
   'scripts/verify-diagrams.js': 'validates the SVG assets',
   'docs/architecture.svg': 'architecture diagram',
   'docs/structure-banner.svg': 'file-system banner',
+  'docs/screenshot.png': 'the dashboard, captured',
   'docs/README-hero.md': 'how to record the real hero GIF',
   CHANGELOG: 'release notes and bug history',
   'docs/model.md': 'path-loss model, in full',

@@ -25,6 +25,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── architecture.svg       # architecture diagram
 │   ├── model.md               # path-loss model, in full
 │   ├── performance.md         # measured cost and accuracy
+│   ├── screenshot.png         # the dashboard, captured
 │   ├── structure-banner.svg   # file-system banner
 │   ├── testing.md             # how the suite is run
 │   └── tree.md
@@ -75,6 +76,7 @@ cannot drift. Regenerate with `npm run tree`.
     │   └── malformed.svg
     ├── heatmap.test.js        # grid and statistics
     ├── history.test.js        # buffer, deltas, CSV quoting
+    ├── host-default.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
     ├── server.test.js         # commands, routes, payload size

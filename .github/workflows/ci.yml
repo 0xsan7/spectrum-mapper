@@ -77,3 +77,56 @@ jobs:
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=moderate
+
+  docker:
+    name: Build and health-check the image
+    # The image binds HOST=0.0.0.0 because the application default is now
+    # loopback for safety. Nothing else in CI would notice if that override
+    # were dropped: the build still succeeds and the suite still passes, but
+    # `docker run -p 3000:3000` would publish a port that connects to nothing.
+    # So the image is actually run and asked for a frame.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the image
+        run: docker build -t spectrum-mapper:ci .
+
+      - name: Start it detached
+        run: docker run -d --name spectrum-mapper-ci -p 3000:3000 spectrum-mapper:ci
+
+      - name: Poll the summary endpoint
+        # The server is already listening when the container reports started, so
+        # a single successful request is the readiness signal. Polling rather
+        # than sleeping once avoids both a flaky pass on a slow runner and a
+        # 30-second wait on a fast one.
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://localhost:3000/api/summary > /tmp/summary.json; then
+              echo "answered after ${attempt}s"
+              cat /tmp/summary.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the container never answered /api/summary within 30s"
+          echo "--- docker ps ---"
+          docker ps -a --filter name=spectrum-mapper-ci || true
+          echo "--- container logs ---"
+          docker logs spectrum-mapper-ci || true
+          exit 1
+
+      - name: Container logs on failure
+        # Runs only when the poll step failed. The poll step already prints
+        # logs, so this is a second copy on purpose: if the failure was the
+        # step being cancelled or timing out rather than a clean exit 1, this
+        # is the only thing that shows why.
+        if: failure()
+        run: docker logs spectrum-mapper-ci || true
+
+      - name: Stop the container
+        # Unconditional, and last, so a failed poll cannot leave a container
+        # running on the runner for the rest of the job's teardown.
+        if: always()
+        run: docker stop spectrum-mapper-ci || true

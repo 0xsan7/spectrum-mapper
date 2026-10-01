@@ -12,8 +12,12 @@ recording exists. See docs/README-hero.md for how to record one.
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#performance">Measured performance</a> ·
+  <a href="#docs">Docs</a> ·
   <a href="#roadmap">Roadmap</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Spectrum Mapper dashboard" width="100%">
 </p>
 
 <p align="center">
@@ -48,6 +52,8 @@ watch four receivers try to work out where the mobile device is.
   grid
 - **Trilateration** of the mobile transmitter, with the estimate drawn against
   the true position and the error in metres
+- **Localises the mobile transmitter to about 1.8 m near the centre and 5.5 m at
+  the edges** (simulated, 3 dB fading)
 - **RSSI and error time series**, plus movement trails
 - **Export** the map as PNG, or the data as CSV/JSON over HTTP
 
@@ -98,7 +104,7 @@ Every value has a default, so the app runs with no `.env` at all. Copy
 | Variable                     | Default        | Meaning                                |
 | ---------------------------- | -------------- | -------------------------------------- |
 | `PORT`                       | `3000`         | HTTP port                              |
-| `HOST`                       | `0.0.0.0`      | Bind address                           |
+| `HOST`                       | `127.0.0.1`    | Bind address                           |
 | `ROOM_WIDTH` / `ROOM_HEIGHT` | `20` / `15`    | Room size in metres                    |
 | `GRID_RESOLUTION`            | `1`            | Metres per heatmap cell                |
 | `UPDATE_RATE`                | `500`          | Milliseconds between frames            |
@@ -109,8 +115,12 @@ Real process environment variables take precedence over `.env`.
 
 ## The model
 
-Signal is modelled with a log-distance path-loss law, reference loss normalised
-by distance, wall attenuation, and fading — see [docs/model.md](docs/model.md).
+```
+RSSI = Tx - PL(d0) - 10·n·log10(d/d0) - walls - fading
+```
+
+Transmit power, minus free-space loss at the reference distance, minus the
+distance-dependent growth, minus whatever the walls and fading take away.
 
 ## Architecture
 
@@ -133,15 +143,16 @@ version of this diagram.
 Every tracked file, one line and a comment each —
 [docs/tree.md](docs/tree.md). Regenerate with `npm run tree`.
 
-## Performance
+## Docs
 
-Measured per-operation cost and localisation accuracy on the author's machine —
-see [docs/performance.md](docs/performance.md).
-
-## Testing
-
-The suite runs on `node:test` with no framework dependency — see
-[docs/testing.md](docs/testing.md).
+| Document                             | What is in it                                            |
+| ------------------------------------ | -------------------------------------------------------- |
+| [Model](docs/model.md)               | The path-loss law, wall attenuation and fading, derived  |
+| [Architecture](docs/architecture.md) | Module responsibilities, the HTTP API, Mermaid diagram   |
+| [Performance](docs/performance.md)   | Measured cost and accuracy on the author's machine       |
+| [Testing](docs/testing.md)           | How the suite is structured and what each check protects |
+| [File tree](docs/tree.md)            | Every tracked file, generated                            |
+| [Changelog](CHANGELOG.md)            | Release notes and the bugs fixed in each                 |
 
 ## Known limitations
 
@@ -157,9 +168,9 @@ The suite runs on `node:test` with no framework dependency — see
   (0.5 ms), but it is O(cells × sources) and is the first thing that would need a
   spatial index at a much finer resolution.
 - **No persistence.** Reloading loses walls, positions, and history.
-- **No authentication.** It binds `0.0.0.0` by default and every client can move
-  everything. Fine for a local tool; do not expose it to a network you do not
-  control.
+- **No authentication.** Any client that can reach it can move everything. It
+  binds `127.0.0.1` by default so that is only your own machine; set
+  `HOST=0.0.0.0` to expose it, and only on a network you control.
 
 ## Roadmap
 
@@ -176,13 +187,12 @@ Roughly in the order I expect to do them.
       compare a later walk against it
 - [ ] **Faster grid** — spatial partitioning so resolution can go well past 1 m
       without the frame budget moving
-- [ ] **Recorded demo GIF** — replacing the placeholder at the top
+- [ ] **Real-data mode** — `POST /api/readings` to push measured RSSI, CSV import,
+      and an interpolated map built from real samples instead of the model
+- [ ] **Dead-zone detector** — find the areas coverage cannot reach, and suggest
+      where to move or add a router to close them
+- [ ] **Recorded demo GIF** — an actual capture of the app, none exists yet
 - [ ] **A real accuracy metric** for when there is no simulated truth
-
-## Changelog
-
-Release notes and the full list of fixes live in
-[CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 

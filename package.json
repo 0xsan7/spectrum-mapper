@@ -1,7 +1,34 @@
 {
   "name": "spectrum-mapper",
   "version": "1.1.0",
-  "description": "Real-time RF signal strength (RSSI) heatmap mapper with log-distance path loss, wall obstacles, and trilateration",
+  "description": "Interactive 2.4 GHz RF coverage simulator with RSSI trilateration. Log-distance path loss, wall attenuation and a live heatmap streamed over WebSocket.",
+  "keywords": [
+    "rssi",
+    "rf",
+    "wifi",
+    "bluetooth",
+    "heatmap",
+    "trilateration",
+    "path-loss",
+    "signal-strength",
+    "indoor-positioning",
+    "wireless",
+    "simulation",
+    "websocket",
+    "nodejs",
+    "express",
+    "canvas"
+  ],
+  "homepage": "https://github.com/0xsan7/spectrum-mapper#readme",
+  "bugs": {
+    "url": "https://github.com/0xsan7/spectrum-mapper/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xsan7/spectrum-mapper.git"
+  },
+  "author": "0xsan7",
+  "license": "MIT",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -17,21 +44,9 @@
     "tree": "node scripts/gen-tree.js --write",
     "verify": "npm run lint && npm run format:check && npm test && npm run verify:readme && npm run verify:diagrams"
   },
-  "keywords": [
-    "rssi",
-    "rf",
-    "wifi",
-    "heatmap",
-    "path-loss",
-    "trilateration",
-    "signal-strength",
-    "canvas",
-    "websocket"
-  ],
   "engines": {
     "node": ">=22.0.0"
   },
-  "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
     "ws": "^8.14.2"

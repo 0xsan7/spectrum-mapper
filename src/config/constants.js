@@ -15,7 +15,7 @@ const CONFIG = {
   // not a magic number buried in the heatmap code.
   HOTSPOT_THRESHOLD: numEnv('HOTSPOT_THRESHOLD', -40),
   PORT: numEnv('PORT', 3000),
-  HOST: process.env.HOST || '0.0.0.0',
+  HOST: process.env.HOST || '127.0.0.1',
 };
 
 const RF_SOURCES = [
