@@ -106,17 +106,37 @@ docker run --rm -p 3000:3000 spectrum-mapper
 Every value has a default, so the app runs with no `.env` at all. Copy
 `.env.example` to `.env` to change any of them:
 
-| Variable                     | Default        | Meaning                                |
-| ---------------------------- | -------------- | -------------------------------------- |
-| `PORT`                       | `3000`         | HTTP port                              |
-| `HOST`                       | `127.0.0.1`    | Bind address                           |
-| `ROOM_WIDTH` / `ROOM_HEIGHT` | `20` / `15`    | Room size in metres                    |
-| `GRID_RESOLUTION`            | `1`            | Metres per heatmap cell                |
-| `UPDATE_RATE`                | `500`          | Milliseconds between frames            |
-| `HISTORY_CAPACITY`           | `240`          | Samples kept in the time-series buffer |
-| `MIN_RSSI` / `MAX_RSSI`      | `-100` / `-20` | Display range in dBm                   |
+| Variable                     | Default        | Meaning                                           |
+| ---------------------------- | -------------- | ------------------------------------------------- |
+| `PORT`                       | `3000`         | HTTP port                                         |
+| `HOST`                       | `127.0.0.1`    | Bind address                                      |
+| `ROOM_WIDTH` / `ROOM_HEIGHT` | `20` / `15`    | Room size in metres                               |
+| `GRID_RESOLUTION`            | `1`            | Metres per heatmap cell                           |
+| `UPDATE_RATE`                | `500`          | Milliseconds between frames                       |
+| `HISTORY_CAPACITY`           | `240`          | Samples kept in the time-series buffer            |
+| `MIN_RSSI` / `MAX_RSSI`      | `-100` / `-20` | Display range in dBm                              |
+| `HOTSPOT_THRESHOLD`          | `-40`          | RSSI above which a cell counts as a hotspot (dBm) |
+| `READINGS_TOKEN`             | unset          | Bearer token for ingest; unset means open         |
 
 Real process environment variables take precedence over `.env`.
+
+### Public demo mode
+
+`DEMO_MODE=1` turns this into a copy anyone can open. The room is shared, so
+what one visitor can affect is bounded:
+
+| Variable             | Default  | Meaning                                             |
+| -------------------- | -------- | --------------------------------------------------- |
+| `DEMO_MODE`          | `0`      | `1` enables everything in this table                |
+| `DEMO_RATE_LIMIT`    | `20`     | Commands per second, per client                     |
+| `DEMO_MAX_CLIENTS`   | `50`     | Concurrent WebSocket clients; over this answers 503 |
+| `DEMO_IDLE_RESET_MS` | `600000` | Reset the room after this long with no commands     |
+| `ALLOWED_ORIGINS`    | unset    | Comma-separated Origin allowlist for the socket     |
+
+Ingest is refused with `403` in demo mode, a banner says the room is shared,
+and `GET /healthz` answers independently of the simulation loop so a platform's
+health check is not measuring the thing it is checking. Every variable above is
+ignored unless `DEMO_MODE=1`, so a local install is unaffected.
 
 ## The model
 

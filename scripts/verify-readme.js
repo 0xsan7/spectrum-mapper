@@ -5,6 +5,7 @@
  *   node scripts/verify-readme.js
  */
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -292,6 +293,63 @@ const endpoints = [
 ];
 for (const e of endpoints) {
   check(`${e} route registered`, serverSrc.includes(e));
+}
+
+/*
+ * Every key in CONFIG is a knob somebody will read about. Adding a knob and
+ * forgetting to document it is the usual way this docs rot, and nothing else in
+ * the suite notices: the value simply works, undocumented.
+ *
+ * Both surfaces are checked because they drift independently - the README table
+ * is for readers, .env.example is what gets copied into a real .env.
+ */
+{
+  const constants = read('src/config/constants.js');
+  const keys = [
+    ...new Set(
+      [...constants.matchAll(/^\s{2}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1])
+    ),
+  ].sort();
+
+  const envExample = read('.env.example');
+  // The docs count as coverage for a key, since a few of them are only
+  // meaningful with prose rather than a table row.
+  // The tracked-file list comes from git rather than a glob, so an untracked
+  // doc cannot quietly satisfy the check.
+  const docs = execFileSync('git', ['ls-files', 'docs/*.md'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean)
+    .map((f) => read(f))
+    .join('\n');
+  const prose = `${readme}${docs}`;
+
+  const missingEverywhere = keys.filter((k) => !prose.includes(k));
+  check(
+    `every CONFIG key is documented somewhere (${keys.length} keys)`,
+    missingEverywhere.length === 0,
+    `undocumented: ${missingEverywhere.join(', ')}`
+  );
+
+  // .env.example is stricter on purpose: it is what gets copied into a real
+  // .env, so prose in the README is not a substitute for the key being there.
+  // Reading it the other way - "documented anywhere counts" - let
+  // DEMO_MAX_CLIENTS be dropped from .env.example while the README table still
+  // mentioned it, which is exactly the drift this is meant to catch.
+  // Assigned, not merely named: the demo-mode prose in .env.example lists its
+  // variables in a comment, so an "includes the name" check passed even after
+  // the assignment line was deleted.
+  const assigned = new Set(
+    [...envExample.matchAll(/^([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1])
+  );
+  const missingFromEnv = keys.filter((k) => !assigned.has(k));
+  check(
+    `every CONFIG key is in .env.example (${keys.length} keys)`,
+    missingFromEnv.length === 0,
+    `missing from .env.example: ${missingFromEnv.join(', ')}`
+  );
 }
 
 // The reverse direction: a route that exists but is undocumented is the more
