@@ -17,6 +17,10 @@ recording exists. See docs/README-hero.md for how to record one.
 </p>
 
 <p align="center">
+  <img src="docs/screenshot.png" alt="Spectrum Mapper dashboard" width="100%">
+</p>
+
+<p align="center">
   <a href="https://github.com/0xsan7/spectrum-mapper/actions/workflows/ci.yml">
     <img src="https://github.com/0xsan7/spectrum-mapper/actions/workflows/ci.yml/badge.svg" alt="CI: lint, format, test, dependency audit" height="20">
   </a>

@@ -44,6 +44,37 @@ function check(label, ok, detail) {
 
 console.log('README claims vs reality');
 
+/* ---- the screenshot the README shows ----
+ *
+ * The README embeds docs/screenshot.png. A missing file renders as a broken
+ * image, which is exactly the "implies something exists that does not" problem
+ * the hero placeholder was deleted for, so this has to be a hard failure.
+ */
+const SCREENSHOT = 'docs/screenshot.png';
+check(
+  'README embeds docs/screenshot.png',
+  new RegExp(`<img src="${SCREENSHOT.replace(/\//g, '\\/')}"[^>]*>`).test(
+    readme
+  )
+);
+check(
+  `${SCREENSHOT} exists`,
+  exists(SCREENSHOT),
+  'the README references it; see docs/README-hero.md for how to capture one'
+);
+if (exists(SCREENSHOT)) {
+  const abs = path.join(ROOT, SCREENSHOT);
+  const bytes = fs.readFileSync(abs);
+  // read() above returns utf8 text, so the PNG signature has to be read as
+  // bytes - asking a string for .subarray() throws and takes the verifier down
+  // with it instead of reporting a failure.
+  check(
+    `${SCREENSHOT} is a non-empty PNG`,
+    bytes.length > 8 && bytes.subarray(1, 4).toString('latin1') === 'PNG',
+    `${bytes.length} bytes, or no PNG signature`
+  );
+}
+
 /* ---- load the split-out docs, failing loudly if any is absent ---- */
 for (const file of Object.keys(DOCS)) {
   if (!exists(file)) {
@@ -283,8 +314,12 @@ check(
   readme.includes('docs/README-hero.md')
 );
 check(
-  'README embeds no demo image',
-  !/<img[^>]+src="[^"]*\.(gif|png|webp|mov|mp4)"/i.test(readme),
+  // A screenshot is not a recording. docs/screenshot.png is a still capture of
+  // the dashboard and is honest about what it is; what must not appear is
+  // anything that reads as a demo having been captured - an animated GIF or
+  // video, since none has been recorded.
+  'README embeds no demo animation',
+  !/<img[^>]+src="[^"]*\.(gif|webp|mov|mp4)"/i.test(readme),
   'no recording has been made; do not imply otherwise'
 );
 check(
