@@ -104,7 +104,7 @@ Every value has a default, so the app runs with no `.env` at all. Copy
 | Variable                     | Default        | Meaning                                |
 | ---------------------------- | -------------- | -------------------------------------- |
 | `PORT`                       | `3000`         | HTTP port                              |
-| `HOST`                       | `0.0.0.0`      | Bind address                           |
+| `HOST`                       | `127.0.0.1`    | Bind address                           |
 | `ROOM_WIDTH` / `ROOM_HEIGHT` | `20` / `15`    | Room size in metres                    |
 | `GRID_RESOLUTION`            | `1`            | Metres per heatmap cell                |
 | `UPDATE_RATE`                | `500`          | Milliseconds between frames            |
@@ -168,9 +168,9 @@ Every tracked file, one line and a comment each —
   (0.5 ms), but it is O(cells × sources) and is the first thing that would need a
   spatial index at a much finer resolution.
 - **No persistence.** Reloading loses walls, positions, and history.
-- **No authentication.** It binds `0.0.0.0` by default and every client can move
-  everything. Fine for a local tool; do not expose it to a network you do not
-  control.
+- **No authentication.** Any client that can reach it can move everything. It
+  binds `127.0.0.1` by default so that is only your own machine; set
+  `HOST=0.0.0.0` to expose it, and only on a network you control.
 
 ## Roadmap
 

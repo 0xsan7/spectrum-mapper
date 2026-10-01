@@ -750,6 +750,85 @@ if (!block) {
  * together: the badge said >=18, engines said >=18, and CI actually ran 20.
  * Check the lowest version in the CI matrix against engines, and the README
  * against engines, so they cannot drift apart again. */
+/* ---- the bind address, in all four places it is stated ----
+ *
+ * constants.js, .env.example, the README table and the README limitations
+ * bullet are four statements of one security-relevant default. They agreed
+ * before this change; nothing held them together. The test suite covers each
+ * of them too - this check exists so the README table cannot drift from the
+ * code on its own, the way the Node badge did.
+ */
+{
+  const constants = fs.readFileSync(
+    path.join(ROOT, 'src/config/constants.js'),
+    'utf8'
+  );
+  const hostMatch = constants.match(
+    /HOST:\s*process\.env\.HOST\s*\|\|\s*'([^']+)'/
+  );
+  const defaultHost = hostMatch ? hostMatch[1] : null;
+  check(
+    'constants.js declares a HOST default',
+    defaultHost !== null,
+    "expected HOST: process.env.HOST || '<address>'"
+  );
+  if (defaultHost) {
+    // Built by locating the row and reading the cell, rather than by matching
+    // a pattern full of backticks: nesting those inside a template literal is
+    // where this went wrong once.
+    const hostRow = readme.split('\n').find((l) => /^\|\s*.HOST./.test(l));
+    check(
+      `README config table has a HOST row`,
+      hostRow !== undefined,
+      'the configuration table should list HOST'
+    );
+    if (hostRow !== undefined) {
+      const cell = hostRow
+        .split('|')
+        .map((c) => c.trim().replace(/^[`]+|[`]+$/g, ''))
+        .find((c) => c && c !== 'HOST' && c !== 'Default' && c !== 'Meaning');
+      check(
+        `README config table shows the HOST default (${defaultHost})`,
+        cell === defaultHost,
+        `the table says ${cell}, src/config/constants.js says ${defaultHost}`
+      );
+    }
+
+    const escaped = defaultHost.replace(/\./g, '\\.');
+    check(
+      `.env.example shows the HOST default (${defaultHost})`,
+      new RegExp(`^HOST=${escaped}$`, 'm').test(read('.env.example')),
+      'a stale .env.example silently overrides the new default'
+    );
+
+    // The bullet has to describe the default that is actually in force, and
+    // still say how to opt out of it.
+    const stated = (readme.match(/binds `([\d.]+)` by default/) || [])[1];
+    check(
+      `limitations bullet names the HOST default (${defaultHost})`,
+      stated === defaultHost,
+      stated
+        ? `the bullet says ${stated}, the code says ${defaultHost}`
+        : 'no "binds `<address>` by default" in the limitations'
+    );
+    check(
+      'limitations bullet still says how to expose it',
+      readme.includes(
+        `HOST=${defaultHost === '127.0.0.1' ? '0.0.0.0' : defaultHost}`
+      ),
+      'the change is only defensible if the escape hatch is documented'
+    );
+
+    // The image has to opt in, or `docker run -p 3000:3000` connects to nothing.
+    const dockerfile = read('Dockerfile');
+    check(
+      'the Dockerfile overrides HOST for the container',
+      /HOST=0\.0\.0\.0/.test(dockerfile),
+      'loopback is unreachable from outside a container'
+    );
+  }
+}
+
 console.log('\nSupported Node versions');
 {
   const pkg = JSON.parse(read('package.json'));

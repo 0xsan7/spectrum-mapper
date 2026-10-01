@@ -75,6 +75,7 @@ cannot drift. Regenerate with `npm run tree`.
     │   └── malformed.svg
     ├── heatmap.test.js        # grid and statistics
     ├── history.test.js        # buffer, deltas, CSV quoting
+    ├── host-default.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
     ├── server.test.js         # commands, routes, payload size
