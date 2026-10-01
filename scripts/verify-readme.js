@@ -6,6 +6,7 @@
  */
 const fs = require('fs');
 const { execFileSync } = require('child_process');
+const YAML = require('yaml');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -350,6 +351,95 @@ for (const e of endpoints) {
     missingFromEnv.length === 0,
     `missing from .env.example: ${missingFromEnv.join(', ')}`
   );
+}
+
+/*
+ * render.yaml, checked rather than trusted.
+ *
+ * A blueprint is configuration: it can be wrong and nothing fails until
+ * somebody deploys it, which is exactly when it is expensive. These are the
+ * three values a public demo cannot work without, and a blueprint that has
+ * silently lost one of them should fail here rather than in someone's browser.
+ */
+{
+  check('render.yaml exists', exists('render.yaml'));
+
+  if (exists('render.yaml')) {
+    const blueprint = read('render.yaml');
+    // YAML parse, not just a grep: a blueprint that is valid-looking but does
+    // not parse is the failure mode worth catching.
+    let parsed = null;
+    try {
+      parsed = YAML.parse(blueprint);
+    } catch (err) {
+      check('render.yaml parses as YAML', false, err.message);
+    }
+    if (parsed) {
+      check('render.yaml parses as YAML', true);
+
+      const svc = (parsed.services || [])[0] || {};
+      check(
+        'render.yaml declares one web service',
+        (parsed.services || []).length === 1
+      );
+      check(
+        'render.yaml builds from Docker',
+        svc.type === 'web' && svc.runtime === 'docker'
+      );
+      check('render.yaml uses the free plan', svc.plan === 'free');
+      // Render would default this to ./Dockerfile, so a wrong or missing path
+      // is a build failure on deploy rather than a lint failure here.
+      check(
+        'render.yaml points at the Dockerfile',
+        svc.dockerfilePath === './Dockerfile',
+        `got ${JSON.stringify(svc.dockerfilePath)}`
+      );
+      check(
+        'the path render.yaml names is a file in the repository',
+        exists(String(svc.dockerfilePath || '').replace(/^\.\//, ''))
+      );
+      check(
+        'render.yaml health-checks /healthz',
+        svc.healthCheckPath === '/healthz',
+        `got ${svc.healthCheckPath}`
+      );
+
+      // The values, not just the keys. Quoting matters: `value: 1` parses as the
+      // number 1, and DEMO_MODE is compared against the string '1'.
+      const vars = Object.fromEntries(
+        (svc.envVars || []).map((v) => [v.key, v.value])
+      );
+      check(
+        'render.yaml sets DEMO_MODE=1',
+        vars.DEMO_MODE === '1',
+        `got ${JSON.stringify(vars.DEMO_MODE)}`
+      );
+      check(
+        'render.yaml sets HOST=0.0.0.0',
+        vars.HOST === '0.0.0.0',
+        `got ${JSON.stringify(vars.HOST)}`
+      );
+
+      // Cross-checked against the server, so a rename on either side is caught.
+      const constants = read('src/config/constants.js');
+      // DEMO_MODE is compared against the string '1' rather than parsed as a
+      // number, so 'true' does not silently enable it. Match that shape.
+      check(
+        'DEMO_MODE is the name src/config/constants.js reads',
+        /process\.env\.DEMO_MODE === '1'/.test(constants),
+        "expected DEMO_MODE: process.env.DEMO_MODE === '1'"
+      );
+      check(
+        'HOST is the name src/config/constants.js reads',
+        constants.includes('process.env.HOST')
+      );
+      const serverSrc = read('src/server.js');
+      check(
+        '/healthz is the route the server actually serves',
+        /app\.get\(\s*['"]\/healthz['"]/.test(serverSrc)
+      );
+    }
+  }
 }
 
 // The reverse direction: a route that exists but is undocumented is the more

@@ -52,6 +52,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── spectrum-analysis.js   # coverage statistics
 │   ├── style.css              # all styling
 │   └── websocket.js           # connection and reconnect state
+├── render.yaml
 ├── 🔧 scripts/
 │   ├── benchmark.js           # produces the performance numbers
 │   ├── gen-tree.js            # regenerates this tree
