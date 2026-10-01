@@ -164,6 +164,7 @@ const DOCS_TABLE = [
   ['Performance', 'docs/performance.md'],
   ['Testing', 'docs/testing.md'],
   ['Real data', 'docs/real-data.md'],
+  ['Deploy', 'docs/deploy.md'],
   ['File tree', 'docs/tree.md'],
   ['Changelog', 'CHANGELOG.md'],
 ];
@@ -351,6 +352,95 @@ for (const e of endpoints) {
     missingFromEnv.length === 0,
     `missing from .env.example: ${missingFromEnv.join(', ')}`
   );
+}
+
+/*
+ * docs/deploy.md, checked for the things that are easy to state wrongly.
+ *
+ * A deploy page is read once, by someone about to spend an afternoon on it. The
+ * numbers come from the platform's documentation and drift, so the shape of the
+ * claim is checked here rather than trusted.
+ */
+{
+  check('docs/deploy.md exists', exists('docs/deploy.md'));
+
+  if (exists('docs/deploy.md')) {
+    const deploy = read('docs/deploy.md');
+
+    // It has to describe deploying, not merely exist.
+    check(
+      'docs/deploy.md describes the blueprint steps',
+      /New → Blueprint/.test(deploy) && /fork/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md explains why HOST must be 0.0.0.0',
+      /0\.0\.0\.0/.test(deploy) && /loopback/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md says what happens when the free tier sleeps',
+      /spin(?:s|ning)? down|sleeping/i.test(deploy) &&
+        /15 minutes/i.test(deploy)
+    );
+    // Both halves, not either: "cold start" alone could sit in a sentence that
+    // never says how long it takes, which is the part a visitor feels.
+    check(
+      'docs/deploy.md names the cold start and how long it takes',
+      /cold start/i.test(deploy) && /(about|roughly) a minute/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md cites Render for the spin-down behaviour',
+      /render\.com\/docs\/free/.test(deploy)
+    );
+    // Require the warning rather than negating a list of phrasings. Negating
+    // specific wording only catches those wordings: replacing Render's
+    // "do not use free instances for production" with "free instances are
+    // production ready" sailed past a check that only looked for "free
+    // instances are production".
+    check(
+      'docs/deploy.md warns that the free plan is not for production',
+      /not to use free\s+instances for production|free instances are not for production|do not use free instances/i.test(
+        deploy.replace(/\s+/g, ' ')
+      )
+    );
+
+    // The instruction was no live-demo URL anywhere. This repository documents
+    // how to deploy your own copy and points at nobody else's.
+    const allowedHosts =
+      /^(www\.|dashboard\.)?(render\.com|localhost|127\.0\.0\.1|github\.com|docs\.github\.com|your-service)$/;
+    const hostnames = [
+      ...new Set(
+        [...deploy.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) =>
+          m[1].toLowerCase()
+        )
+      ),
+    ].filter((h) => !allowedHosts.test(h));
+    check(
+      'docs/deploy.md links nowhere but Render and the repository',
+      hostnames.length === 0,
+      `unexpected hosts: ${hostnames.join(', ')}`
+    );
+
+    // The blueprint values it documents must be the ones in the blueprint, or
+    // the page is describing a deploy that does not happen.
+    const blueprint = read('render.yaml');
+    check(
+      'render.yaml is still there to deploy',
+      blueprint.includes('services:')
+    );
+    check(
+      'docs/deploy.md states DEMO_MODE=1, as render.yaml sets it',
+      deploy.includes('DEMO_MODE=1') && /value: '1'/.test(blueprint)
+    );
+    check(
+      'docs/deploy.md states HOST=0.0.0.0, as render.yaml sets it',
+      deploy.includes('HOST=0.0.0.0') && blueprint.includes('value: 0.0.0.0')
+    );
+    check(
+      'docs/deploy.md names the health check the blueprint uses',
+      deploy.includes('/healthz') &&
+        blueprint.includes('healthCheckPath: /healthz')
+    );
+  }
 }
 
 /*

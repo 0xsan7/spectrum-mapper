@@ -23,6 +23,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── README-hero.md         # how to record the real hero GIF
 │   ├── architecture.md
 │   ├── architecture.svg       # architecture diagram
+│   ├── deploy.md
 │   ├── examples/
 │   │   └── sample-readings.csv
 │   ├── model.md               # path-loss model, in full

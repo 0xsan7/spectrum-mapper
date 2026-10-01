@@ -138,6 +138,10 @@ and `GET /healthz` answers independently of the simulation loop so a platform's
 health check is not measuring the thing it is checking. Every variable above is
 ignored unless `DEMO_MODE=1`, so a local install is unaffected.
 
+[`render.yaml`](render.yaml) deploys a copy to Render from a blueprint;
+[docs/deploy.md](docs/deploy.md) has the steps and what free-tier sleeping means
+for visitors.
+
 ## The model
 
 ```
@@ -177,6 +181,7 @@ Every tracked file, one line and a comment each —
 | [Performance](docs/performance.md)   | Measured cost and accuracy on the author's machine                 |
 | [Testing](docs/testing.md)           | How the suite is structured and what each check protects           |
 | [Real data](docs/real-data.md)       | Feeding measured RSSI in over HTTP or CSV, and reading it back out |
+| [Deploy](docs/deploy.md)             | Running a public demo, and what free-tier sleeping means           |
 | [File tree](docs/tree.md)            | Every tracked file, generated                                      |
 | [Changelog](CHANGELOG.md)            | Release notes and the bugs fixed in each                           |
 
