@@ -522,6 +522,41 @@ app.post(
   }
 );
 
+/**
+ * POST /api/import/readings.csv - the same ingest from a survey file.
+ *
+ * Served as text/csv and read raw rather than through express.text(), so the
+ * byte cap is the same 100 KB the JSON path uses and a mismatch in either
+ * cannot slip through.
+ */
+app.post(
+  '/api/import/readings.csv',
+  readingsTokenGuard,
+  express.text({ type: 'text/csv', limit: Readings.LIMITS.MAX_BODY_BYTES }),
+  (req, res) => {
+    const parsed = Readings.parseCsv(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    // Parsed, not validated: a CSV row that is short or non-numeric becomes a
+    // point here, and validatePayload is what turns that into a message naming
+    // the offending value. Validating twice would report line numbers for
+    // something the parser already refused.
+    const result = Readings.validatePayload(parsed.points);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    const added = readings.add(result.points);
+    res.status(201).json({
+      imported: added.stored,
+      ...added,
+      readings: readings.size,
+    });
+  }
+);
+
 app.get('/api/summary', (req, res) => {
   const frame = requireFrame(res);
   if (!frame) return;

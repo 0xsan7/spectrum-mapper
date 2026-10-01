@@ -13,6 +13,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -242,6 +243,130 @@ test('GET is not allowed on the ingest route', async () => {
   const s = await startServer();
   try {
     const r = await fetch(`http://127.0.0.1:${s.port}/api/readings`);
+    assert.strictEqual(r.status, 404);
+  } finally {
+    s.stop();
+  }
+});
+
+/** POST text/csv to the import route. */
+const postCsv = (port, body, headers = {}) =>
+  fetch(`http://127.0.0.1:${port}/api/import/readings.csv`, {
+    method: 'POST',
+    headers: { 'content-type': 'text/csv', ...headers },
+    body,
+  });
+
+test('imports a valid CSV with 201', async () => {
+  const s = await startServer();
+  try {
+    const r = await postCsv(s.port, 'x,y,rssi\n1,1,-50\n2,2,-55\n3,3,-60\n');
+    assert.strictEqual(r.status, 201);
+    const body = await r.json();
+    assert.strictEqual(body.imported, 3);
+    assert.strictEqual(body.readings, 3);
+  } finally {
+    s.stop();
+  }
+});
+
+test('rejects a CSV with the wrong header', async () => {
+  const s = await startServer();
+  try {
+    const r = await postCsv(s.port, 'a,b,c\n1,2,-50\n');
+    assert.strictEqual(r.status, 400);
+    assert.match((await r.json()).error, /header must be x,y,rssi/);
+  } finally {
+    s.stop();
+  }
+});
+
+test('rejects a CSV row outside the room, naming the value', async () => {
+  const s = await startServer();
+  try {
+    const r = await postCsv(s.port, 'x,y,rssi\n1,1,-50\n99,2,-50\n');
+    assert.strictEqual(r.status, 400);
+    assert.match((await r.json()).error, /x must be between 0 and 20/);
+  } finally {
+    s.stop();
+  }
+});
+
+test('rejects a CSV with more rows than the per-request limit', async () => {
+  const s = await startServer();
+  try {
+    const many = [
+      'x,y,rssi',
+      ...Array.from({ length: 501 }, () => '1,1,-50'),
+    ].join('\n');
+    const r = await postCsv(s.port, many);
+    assert.strictEqual(r.status, 400);
+    assert.match((await r.json()).error, /too many readings/);
+  } finally {
+    s.stop();
+  }
+});
+
+test('rejects a CSV body over the size limit', async () => {
+  const s = await startServer();
+  try {
+    const wide = ['x,y,rssi'];
+    // Under 501 rows but over 100 KB, which a row-count cap alone misses.
+    for (let i = 0; i < 300; i++) wide.push(`1,${i},-50,${'p'.repeat(400)}`);
+    const r = await postCsv(s.port, wide.join('\n'));
+    assert.ok(
+      r.status === 413 || r.status === 400,
+      `expected refusal, got ${r.status}`
+    );
+  } finally {
+    s.stop();
+  }
+});
+
+test('CSV import honours the token', async () => {
+  const s = await startServer({ READINGS_TOKEN: 'csv-secret' });
+  try {
+    assert.strictEqual(
+      (await postCsv(s.port, 'x,y,rssi\n1,1,-50\n')).status,
+      401
+    );
+    const ok = await postCsv(s.port, 'x,y,rssi\n1,1,-50\n', {
+      authorization: 'Bearer csv-secret',
+    });
+    assert.strictEqual(ok.status, 201);
+  } finally {
+    s.stop();
+  }
+});
+
+test('the shipped sample file imports cleanly', async () => {
+  const s = await startServer();
+  try {
+    const csv = fs.readFileSync(
+      path.join(ROOT, 'docs/examples/sample-readings.csv'),
+      'utf8'
+    );
+    const r = await postCsv(s.port, csv);
+    // Read the body once. assert.strictEqual's third argument is evaluated
+    // eagerly, so passing `await r.text()` there consumes the stream and the
+    // r.json() below throws "Body has already been read".
+    const text = await r.text();
+    assert.strictEqual(r.status, 201, text);
+    const body = JSON.parse(text);
+    // "about 40 points", as documented.
+    assert.ok(
+      body.imported >= 35 && body.imported <= 50,
+      `got ${body.imported}`
+    );
+  } finally {
+    s.stop();
+  }
+});
+
+test('GET is not allowed on the import route', async () => {
+  const s = await startServer();
+  try {
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/import/readings.csv`);
     assert.strictEqual(r.status, 404);
   } finally {
     s.stop();
