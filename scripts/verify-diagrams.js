@@ -162,6 +162,20 @@ for (const { file, viewBox } of ASSETS) {
 /* ---- the README must actually embed them ---- */
 console.log('\nREADME embedding');
 const readme = read('README.md');
+// The tree moved to docs/tree.md when the front page was shortened. It is
+// required: if this silently became an empty string the tree checks below would
+// find no boxes, no comments and no emoji, and report success.
+const TREE_FILE = 'docs/tree.md';
+if (!fs.existsSync(path.join(ROOT, TREE_FILE))) {
+  console.log(
+    `\nFAIL  ${TREE_FILE} is missing - the generated tree cannot be checked`
+  );
+  failures++;
+  console.log('');
+  console.log(`${failures} check(s) failed`);
+  process.exit(1);
+}
+const treeDoc = read(TREE_FILE);
 for (const { file } of ASSETS) {
   check(`README embeds ${file}`, readme.includes(file));
   check(
@@ -169,14 +183,22 @@ for (const { file } of ASSETS) {
     new RegExp(`<img src="${file.replace(/\//g, '\\/')}"[^>]*>`).test(readme)
   );
 }
-check('architecture has a Mermaid fallback', /```mermaid/.test(readme));
+// The Mermaid fallback moved to docs/architecture.md with the module table. It
+// no longer sits in a <details>: on its own page there is nothing to collapse
+// it away from, and the front page links straight to it.
+const archDoc = read('docs/architecture.md');
+check('architecture has a Mermaid fallback', /```mermaid/.test(archDoc));
 check(
-  'Mermaid fallback is inside a collapsed <details>',
-  /<details>[\s\S]*?```mermaid[\s\S]*?<\/details>/.test(readme)
+  'architecture doc is linked from the README',
+  readme.includes('(docs/architecture.md)')
+);
+check(
+  'architecture doc closes its mermaid fence',
+  /```mermaid[\s\S]*?\n```/.test(archDoc)
 );
 check(
   'file tree markers present',
-  /<!-- tree:start -->/.test(readme) && /<!-- tree:end -->/.test(readme)
+  /<!-- tree:start -->/.test(treeDoc) && /<!-- tree:end -->/.test(treeDoc)
 );
 
 /* ---- the banner's file counts must match reality ---- */
@@ -212,7 +234,7 @@ check(
 // Tolerant of the blank line Prettier inserts between the HTML comment and the
 // fence. A strict pattern made the block unreadable the first time the README
 // was formatted, which showed up as "file tree block is extractable" failing.
-const treeBlock = (readme.match(
+const treeBlock = (treeDoc.match(
   /<!-- tree:start -->\r?\n\s*```text\r?\n([\s\S]*?)\r?\n?```\r?\n\s*<!-- tree:end -->/
 ) || [])[1];
 if (treeBlock === undefined) {

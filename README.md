@@ -118,72 +118,11 @@ by distance, wall attenuation, and fading — see [docs/model.md](docs/model.md)
   <img src="docs/architecture.svg" alt="Spectrum Mapper architecture" width="100%">
 </p>
 
-<details>
-<summary><b>Text version (Mermaid)</b> — same diagram, for renderers that do not display SVG</summary>
-
-```mermaid
-flowchart LR
-  subgraph TX["Transmitters — 20 × 15 m room"]
-    direction TB
-    T1["TX-1 Router A<br/>20 dBm"]
-    T2["TX-2 Router B<br/>15 dBm"]
-    T3["TX-3 Mobile<br/>10 dBm · localised"]
-    T4["TX-4 BLE Beacon<br/>5 dBm"]
-  end
-
-  subgraph S["NODE.JS SERVER — :3000"]
-    direction TB
-    S1["Simulation<br/>4 sources · step 500 ms"]
-    S2["Path Loss<br/>RSSI = Tx − PL(d₀) − 10n·log₁₀(d/d₀) − walls − fading<br/>n = 2.7 · f = 2437 MHz · d₀ = 1 m"]
-    S3["Heatmap Grid<br/>20 × 15 m ÷ 1 m = 300 cells<br/>−100…−20 dBm · 501 µs"]
-    S4["Trilateration<br/>4 receivers · least squares<br/>1.8 m centre → 5.5 m edge"]
-    S5["History<br/>240 samples = last 2 min"]
-    S1 --> S2 --> S3 --> S4
-  end
-
-  subgraph B["BROWSER — Canvas 2D"]
-    direction TB
-    B1["WS Client<br/>1 socket · 2 frames/s<br/>snapshot then deltas"]
-    B2["Canvas Heatmap<br/>cells · walls · trails · markers<br/>crosshair = estimate"]
-    B3["RSSI Chart + Trails<br/>error on its own 0…max scale"]
-    B4["Controls<br/>n · f · fading · drag · walls"]
-    B1 --> B2 --> B3 --> B4
-  end
-
-  TX -- "RF" --> S2
-  S3 -- "JSON / 500ms · ~17 KB" --> B1
-  B4 -- "commands: move · setParam · addWall" --> S1
-  S4 --> S5
-```
-
-</details>
-
-| Module                 | Responsibility                                          |
-| ---------------------- | ------------------------------------------------------- |
-| `src/server.js`        | HTTP + WebSocket, state ownership, command validation   |
-| `src/pathLoss.js`      | Log-distance model, dBm ↔ linear power, grid evaluation |
-| `src/heatmap.js`       | Grid generation and statistics                          |
-| `src/simulation.js`    | Transmitter positions, velocity, pinning                |
-| `src/obstacles.js`     | Wall geometry and per-crossing attenuation              |
-| `src/receivers.js`     | Receiver node state                                     |
-| `src/trilateration.js` | RSSI → range → position                                 |
-| `src/history.js`       | Rolling time-series buffer                              |
-| `src/csv.js`           | CSV formatting                                          |
-| `public/*`             | Canvas renderer, controls, chart, export                |
-
-The server owns the simulation. The browser sends intent — "move this", "set
-this parameter" — and renders the frames that come back. It never computes
-physics locally, so two browsers open at once cannot disagree.
-
-### API
-
-```
-GET  /api/summary                 rolling aggregates over the buffer
-GET  /api/export/timeseries.csv   one row per sample
-GET  /api/export/heatmap.csv      one row per grid cell
-GET  /api/export/readings.csv     per-receiver readings behind the estimate
-GET  /api/export/frame.json       the whole frame
-```
+The server owns the simulation; the browser sends intent and renders what comes
+back, so two browsers open at once cannot disagree. Module responsibilities and
+the HTTP API are in
+[docs/architecture.md](docs/architecture.md), which also carries a Mermaid
+version of this diagram.
 
 ## Project structure
 
@@ -191,97 +130,8 @@ GET  /api/export/frame.json       the whole frame
   <img src="docs/structure-banner.svg" alt="Spectrum Mapper file system" width="100%">
 </p>
 
-Generated from `git ls-files` by `npm run tree` — the lockfile is excluded, and
-a file that no longer exists cannot linger here.
-
-<!-- tree:start -->
-
-```text
-├── .dockerignore              # image build context exclusions
-├── .env.example               # every setting, documented
-├── 🔄 .github/
-│   └── workflows/
-│       └── ci.yml             # lint, format, test, audit, docs check
-├── .gitignore                 # ignored paths
-├── .prettierignore            # formatting exclusions
-├── .prettierrc.json           # formatting config
-├── CHANGELOG.md               # release history
-├── CONTRIBUTING.md            # how to contribute
-├── Dockerfile                 # multi-stage production image
-├── LICENSE                    # MIT
-├── README.md                  # this file
-├── 📚 docs/
-│   ├── README-hero.md         # how to record the real hero GIF
-│   ├── architecture.svg       # architecture diagram
-│   ├── model.md               # path-loss model, in full
-│   ├── performance.md         # measured cost and accuracy
-│   ├── structure-banner.svg   # file-system banner
-│   └── testing.md             # how the suite is run
-├── eslint.config.mjs          # flat config; browser globals declared here
-├── package.json               # scripts, engines, dependencies
-├── 🖥️ public/
-│   ├── chart.js               # RSSI and error time series
-│   ├── colors.js              # RSSI → RGB ramp
-│   ├── controls.js            # sliders, transport, wall controls
-│   ├── dashboard.js           # single app instance, frame dispatch
-│   ├── export.js              # PNG compositor
-│   ├── favicon.svg            # icon
-│   ├── heatmap.js             # canvas renderer, walls, trails, markers
-│   ├── index.html             # document shell and sidebar
-│   ├── interaction.js         # TX/RX dragging, wall drawing
-│   ├── legend.js              # legend built from the same ramp
-│   ├── logger.js              # namespaced console logging
-│   ├── performance.js         # throttle helper
-│   ├── responsive.js          # viewport listener
-│   ├── shortcuts.js           # keyboard commands
-│   ├── spectrum-analysis.js   # coverage statistics
-│   ├── style.css              # all styling
-│   └── websocket.js           # connection and reconnect state
-├── 🔧 scripts/
-│   ├── benchmark.js           # produces the README performance numbers
-│   ├── gen-tree.js            # regenerates this tree
-│   ├── localisation-errors.js
-│   ├── svg-xml.js
-│   ├── verify-diagrams.js     # validates the SVG assets
-│   └── verify-readme.js       # fails when docs drift from code
-├── ⚡ src/
-│   ├── ⚙️ config/
-│   │   ├── constants.js       # room, grid, model and node defaults
-│   │   └── env.js             # dependency-free .env loader
-│   ├── csv.js                 # CSV formatting for the export API
-│   ├── heatmap.js             # grid generation and statistics
-│   ├── history.js             # rolling time-series buffer
-│   ├── obstacles.js           # wall geometry and per-crossing attenuation
-│   ├── pathLoss.js            # log-distance model, dBm ↔ linear power
-│   ├── receivers.js           # receiver node state
-│   ├── server.js              # Express + ws, state owner, command validation
-│   ├── simulation.js          # transmitter positions, velocity, pinning
-│   └── trilateration.js       # RSSI → range → position
-└── 🧪 test/
-    ├── browser.test.js        # browser logic loaded into a VM
-    ├── diagrams.test.js
-    ├── fixtures/
-    │   └── malformed.svg
-    ├── heatmap.test.js        # grid and statistics
-    ├── history.test.js        # buffer, deltas, CSV quoting
-    ├── obstacles.test.js      # wall geometry, server state, NaN handling
-    ├── pathLoss.test.js       # model anchored to reference values
-    ├── server.test.js         # commands, routes, payload size
-    ├── trilateration.test.js  # inversion and degenerate cases
-    └── verify-readme.test.js
-
-```
-
-<!-- tree:end -->
-
-Four folders carry the weight:
-
-| Folder     | What lives there                                                                                                                  |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `src/`     | The server and the physics. No DOM access, no browser globals — this half runs in Node and is where the tests point.              |
-| `public/`  | Classic scripts sharing one global scope, plus the CSS. Not transpiled and not bundled, so `index.html` lists them in load order. |
-| `test/`    | `node:test` suites, one per module, plus `browser.test.js` which loads the real `public/*.js` into a VM.                          |
-| `scripts/` | The tools that keep the docs honest: the benchmark, the README checker, this tree generator.                                      |
+Every tracked file, one line and a comment each —
+[docs/tree.md](docs/tree.md). Regenerate with `npm run tree`.
 
 ## Performance
 

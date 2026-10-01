@@ -29,6 +29,7 @@ const DOCS = {
   'docs/model.md': null,
   'docs/performance.md': null,
   'docs/testing.md': null,
+  'docs/architecture.md': null,
 };
 
 let failures = 0;
@@ -58,12 +59,14 @@ for (const file of Object.keys(DOCS)) {
 const modelDoc = DOCS['docs/model.md'];
 const perfDoc = DOCS['docs/performance.md'];
 const testingDoc = DOCS['docs/testing.md'];
+const archDoc = DOCS['docs/architecture.md'];
 
 // The README must link to each of them, or the content is unreachable.
 for (const file of [
   'docs/model.md',
   'docs/performance.md',
   'docs/testing.md',
+  'docs/architecture.md',
 ]) {
   check(`README links to ${file}`, readme.includes(`(${file})`));
 }
@@ -190,10 +193,14 @@ const named = [
   'src/history.js',
   'src/csv.js',
 ];
+// Every server module must be accounted for somewhere in the documentation.
+// The module table lives in docs/architecture.md now, so "documented" spans the
+// front page and the architecture doc rather than the README alone.
+const documented = `${readme}\n${archDoc}`;
 for (const f of named) {
   check(
-    `${f} exists and is named in the README`,
-    exists(f) && readme.includes(f)
+    `${f} exists and is named in the docs`,
+    exists(f) && documented.includes(f)
   );
 }
 
@@ -218,7 +225,8 @@ const registered = [
   ),
 ];
 for (const e of registered) {
-  check(`${e} is documented in the README`, readme.includes(e));
+  // Routes are documented in docs/architecture.md, which holds the API table.
+  check(`${e} is documented in the docs`, archDoc.includes(e));
 }
 
 /* ---- npm scripts the README tells people to run ---- */
@@ -416,14 +424,14 @@ if (arch) {
   );
   check(
     'Mermaid fallback states the same formula',
-    formulaRe.test(formula(readme)),
+    formulaRe.test(formula(archDoc)),
     'the fallback must match the diagram'
   );
-  check(
-    'README model summary derives the same expression',
-    formulaRe.test(formula(readme)),
-    'the prose must match the diagram'
-  );
+  // There is deliberately no "README states the formula" check. The front
+  // page's model section is a two-line summary that links to docs/model.md;
+  // there is no formula on it to drift. The two places that do state the
+  // expression - docs/model.md and docs/architecture.md - are each checked
+  // against the diagram above.
   check(
     'docs/model.md derives the same expression',
     formulaRe.test(formula(modelDoc)),

@@ -1,12 +1,12 @@
 /**
- * Generate the project-structure tree for the README from `git ls-files`.
+ * Generate the project-structure tree for docs/tree.md from `git ls-files`.
  *
  * Generated rather than hand-written so it cannot drift: a new module shows up
  * the next time this runs. Excluded: the lockfile (noise at this depth) and
  * anything under node_modules.
  *
  *   node scripts/gen-tree.js          # print the tree
- *   node scripts/gen-tree.js --write  # print, and splice into README.md
+ *   node scripts/gen-tree.js --write  # print, and splice into docs/tree.md
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -60,7 +60,7 @@ const DESCRIPTIONS = {
   'test/history.test.js': 'buffer, deltas, CSV quoting',
   'test/server.test.js': 'commands, routes, payload size',
   'test/browser.test.js': 'browser logic loaded into a VM',
-  'scripts/benchmark.js': 'produces the README performance numbers',
+  'scripts/benchmark.js': 'produces the performance numbers',
   'scripts/verify-readme.js': 'fails when docs drift from code',
   'scripts/gen-tree.js': 'regenerates this tree',
   'scripts/verify-diagrams.js': 'validates the SVG assets',
@@ -158,8 +158,8 @@ const tree = lines
   .join('\n');
 
 if (process.argv.includes('--write')) {
-  const readmePath = path.join(ROOT, 'README.md');
-  const readme = fs.readFileSync(readmePath, 'utf8');
+  const targetPath = path.join(ROOT, 'docs/tree.md');
+  const readme = fs.readFileSync(targetPath, 'utf8');
   // The content group must allow an empty block, and the gap after the marker
   // must be tolerant: Prettier inserts a blank line between the HTML comment
   // and the fence, so requiring exactly one newline meant the block could be
@@ -168,12 +168,12 @@ if (process.argv.includes('--write')) {
     /(<!-- tree:start -->\r?\n\s*```text\r?\n)[\s\S]*?(\r?\n?```\r?\n\s*<!-- tree:end -->)/;
   if (!re.test(readme)) {
     console.error(
-      'could not find the <!-- tree:start --> markers in README.md'
+      'could not find the <!-- tree:start --> markers in docs/tree.md'
     );
     process.exit(1);
   }
-  fs.writeFileSync(readmePath, readme.replace(re, `$1${tree}\n$2`));
-  console.error(`README.md tree updated (${lines.length} lines)`);
+  fs.writeFileSync(targetPath, readme.replace(re, `$1${tree}\n$2`));
+  console.error(`docs/tree.md tree updated (${lines.length} lines)`);
 }
 
 console.log(tree);
