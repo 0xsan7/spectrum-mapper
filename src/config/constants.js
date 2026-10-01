@@ -16,6 +16,11 @@ const CONFIG = {
   HOTSPOT_THRESHOLD: numEnv('HOTSPOT_THRESHOLD', -40),
   PORT: numEnv('PORT', 3000),
   HOST: process.env.HOST || '127.0.0.1',
+
+  // Optional shared secret for the reading endpoints. Empty means open. A
+  // local deployment has no reason to set one; a public one does, because
+  // without it anyone can overwrite the measured map.
+  READINGS_TOKEN: process.env.READINGS_TOKEN || '',
 };
 
 const RF_SOURCES = [

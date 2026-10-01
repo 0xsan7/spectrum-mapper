@@ -1,5 +1,6 @@
 const express = require('express');
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
 const RFSimulation = require('./simulation');
@@ -10,6 +11,8 @@ const Trilateration = require('./trilateration');
 const PathLossModel = require('./pathLoss');
 const History = require('./history');
 const CSV = require('./csv');
+const Readings = require('./readings');
+const Interpolate = require('./interpolate');
 const { CONFIG } = require('./config/constants');
 
 const app = express();
@@ -28,6 +31,9 @@ const obstacles = new Obstacles();
 // rollover behaviour can be exercised without waiting two minutes.
 const HISTORY_CAPACITY = Number(CONFIG.HISTORY_CAPACITY) || 240;
 const history = new History(HISTORY_CAPACITY);
+
+/** Measured readings, bounded. See src/readings.js. */
+const readings = new Readings.ReadingsStore();
 
 /**
  * Sequence number of the last history sample sent to clients. A sequence
@@ -68,6 +74,49 @@ const LIMITS = {
   noise: { min: 0, max: 20, step: 0.5 },
   paused: { min: 0, max: 1, step: 1 },
 };
+
+/**
+ * Measured grid, recomputed only when the store actually changes.
+ *
+ * updateSimulation runs twice a second and the grid is 300 cells over 8
+ * neighbours each, so rebuilding it on every tick would be pure waste - and it
+ * is stable data. Keyed on the store's accepted counter, which only advances
+ * when something was stored.
+ */
+let measuredCache = { key: -1, value: null };
+
+function measuredData() {
+  if (readings.size === 0) {
+    measuredCache = { key: '', value: null };
+    return null;
+  }
+  const modelKey = `${readings.accepted}|${params.exponent}|${params.frequency}|${params.noise}`;
+  if (measuredCache.key !== modelKey) {
+    const points = readings.all();
+    // How far the model is from what was actually measured, at the sample
+    // points. This is the number that says whether the simulator is any use for
+    // the room it claims to model - and it is only meaningful against the model
+    // that is currently configured, so it moves when the sliders move.
+    const rmseDb = Interpolate.modelRmseDb(points, (x, y) =>
+      PathLossModel.calculateGridRSSI(x, y, simulation.getSourceData(), {
+        ...currentPathLossOptions(),
+        obstacles,
+      })
+    );
+    measuredCache = {
+      key: modelKey,
+      value: {
+        grid: Interpolate.generateGrid(points),
+        points,
+        count: readings.size,
+        maxDistance: Interpolate.IDW.MAX_DISTANCE,
+        dropped: readings.dropped,
+        rmseDb,
+      },
+    };
+  }
+  return measuredCache.value;
+}
 
 let simulationData = null;
 // Set by start(). Kept module-level so shutdown() can clear it. It is
@@ -228,6 +277,10 @@ function updateSimulation(full = false) {
     bounds: { min: CONFIG.MIN_RSSI, max: CONFIG.MAX_RSSI },
     roomWidth: CONFIG.ROOM_WIDTH,
     roomHeight: CONFIG.ROOM_HEIGHT,
+    // null until something has been ingested. The browser checks for null
+    // rather than for an empty array: "no measurements yet" and "measurements
+    // that cover none of this room" are different states.
+    measured: measuredData(),
   };
 
   history.push(simulationData);
@@ -336,6 +389,11 @@ function handleCommand(msg) {
       params.noise = 3;
       return null;
 
+    case 'clearReadings':
+      readings.clear();
+      measuredCache = { key: '', value: null };
+      return null;
+
     case 'clearHistory':
       history.clear();
       sentHistorySeq = -1;
@@ -430,6 +488,27 @@ app.get('/api/export/readings.csv', (req, res) => {
   res.send(CSV.readingsToCsv(frame.tracking));
 });
 
+/**
+ * The readings that came in, in the same format the import accepts, so a survey
+ * can be taken back out and re-imported elsewhere. Deliberately not heatmap.csv:
+ * that is the model's grid, and mixing the two would quietly relabel synthetic
+ * values as measurements.
+ */
+app.get('/api/export/measured.csv', (req, res) => {
+  res.type('text/csv');
+  res.set(
+    'Content-Disposition',
+    'attachment; filename="spectrum-measured.csv"'
+  );
+  const rows = readings
+    .all()
+    .map((p) => `${p.x},${p.y},${p.rssi}`)
+    .join('\n');
+  // A header-only file rather than a 404: asking for the measurements when
+  // there are none is a legitimate state, not a missing resource.
+  res.send(rows ? `x,y,rssi\n${rows}\n` : 'x,y,rssi\n');
+});
+
 /** The full frame as JSON, for scripting or archiving a run. */
 app.get('/api/export/frame.json', (req, res) => {
   const frame = requireFrame(res);
@@ -445,10 +524,116 @@ app.get('/api/export/frame.json', (req, res) => {
     walls: frame.walls,
     tracking: frame.tracking,
     heatmap: frame.heatmap,
+    // The export is documented as the full frame, so the measured layer rides
+    // along. Without it a scripted consumer of frame.json could see the model
+    // grid and no way to tell it apart from real measurements.
+    measured: frame.measured,
     history: history.series(),
     summary: history.summary(),
   });
 });
+
+/* ---- ingest measured readings ---- */
+
+/**
+ * Reject an unauthenticated ingest attempt before the body is read, so a bad
+ * token costs nothing.
+ */
+function readingsTokenGuard(req, res, next) {
+  if (readingsTokenOk(req)) {
+    next();
+    return;
+  }
+  res
+    .status(401)
+    .json({ error: 'a valid Authorization: Bearer token is required' });
+}
+
+/**
+ * Shared-secret check for the ingest endpoints.
+ *
+ * Timing-safe because the token is compared byte for byte, and a plain
+ * `===` leaks its length and first differing byte through response time.
+ * Returns false when no token is configured, so a local install is open.
+ */
+function readingsTokenOk(req) {
+  const expected = CONFIG.READINGS_TOKEN;
+  if (!expected) return true;
+
+  const header = req.get('authorization') || '';
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  if (!match) return false;
+  return timingSafeEqual(match[1], expected);
+}
+
+function timingSafeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  // Hash first so the comparison is over equal-length buffers; without this a
+  // length mismatch returns early and takes a different time.
+  const ah = crypto.createHash('sha256').update(ab).digest();
+  const bh = crypto.createHash('sha256').update(bb).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
+/**
+ * POST /api/readings - one reading or an array of them.
+ *
+ * Body size is capped before parsing. express.json() will happily buffer a
+ * 500 MB body and then fail on the JSON parse, so the limit has to be a
+ * transport-level one.
+ */
+app.post(
+  '/api/readings',
+  readingsTokenGuard,
+  express.json({ limit: Readings.LIMITS.MAX_BODY_BYTES }),
+  (req, res) => {
+    const result = Readings.validatePayload(req.body);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    const added = readings.add(result.points);
+    res
+      .status(201)
+      .json({ accepted: added.stored, ...added, readings: readings.size });
+  }
+);
+
+/**
+ * POST /api/import/readings.csv - the same ingest from a survey file.
+ *
+ * Served as text/csv and read raw rather than through express.text(), so the
+ * byte cap is the same 100 KB the JSON path uses and a mismatch in either
+ * cannot slip through.
+ */
+app.post(
+  '/api/import/readings.csv',
+  readingsTokenGuard,
+  express.text({ type: 'text/csv', limit: Readings.LIMITS.MAX_BODY_BYTES }),
+  (req, res) => {
+    const parsed = Readings.parseCsv(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    // Parsed, not validated: a CSV row that is short or non-numeric becomes a
+    // point here, and validatePayload is what turns that into a message naming
+    // the offending value. Validating twice would report line numbers for
+    // something the parser already refused.
+    const result = Readings.validatePayload(parsed.points);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    const added = readings.add(result.points);
+    res.status(201).json({
+      imported: added.stored,
+      ...added,
+      readings: readings.size,
+    });
+  }
+);
 
 app.get('/api/summary', (req, res) => {
   const frame = requireFrame(res);
@@ -490,6 +675,7 @@ module.exports = {
   receivers,
   obstacles,
   history,
+  readings,
   params,
   handleCommand,
   updateSimulation,

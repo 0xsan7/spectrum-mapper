@@ -6,7 +6,7 @@
  *   R      reset the scene
  *   W      toggle wall-drawing mode
  *   C      clear all walls
- *   M      back to move mode
+ *   M      cycle the map: model / measured
  */
 class KeyboardShortcuts {
   static init() {
@@ -40,7 +40,11 @@ class KeyboardShortcuts {
           dashboard.setStatusHint();
           break;
         case 'm':
+          // Cycle the map layer. Leaving wall-drawing mode at the same time is
+          // deliberate: M is the escape hatch back to looking at the map, and a
+          // cursor left in crosshair makes that surprising.
           dashboard.interaction.setMode('move');
+          dashboard.cycleMapMode();
           dashboard.setStatusHint();
           break;
         case 'c':

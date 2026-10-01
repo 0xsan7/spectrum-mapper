@@ -33,6 +33,7 @@ class Dashboard {
       canvas: this.canvas,
       dashboard: this,
     });
+    this.initMeasuredControls();
 
     this.chart = new RssiChart(document.getElementById('rssiChart'), {
       min: this.minRssi,
@@ -72,6 +73,7 @@ class Dashboard {
 
     this.render();
     this.updateSidebar();
+    this.updateMeasuredPanel();
     this.updateTracking();
     this.updateCoverage();
     this.updateChart();
@@ -167,6 +169,128 @@ class Dashboard {
   }
 
   /** Echo the current interaction mode, so W/M have visible feedback. */
+  /**
+   * M cycles model <-> measured. Falls back to the model grid when nothing has
+   * been ingested, and says so rather than showing an empty map.
+   */
+  cycleMapMode() {
+    const measured = this.currentData && this.currentData.measured;
+    const next = this.renderer.mapMode === 'measured' ? 'model' : 'measured';
+    if (next === 'measured' && !measured) {
+      this.renderer.mapMode = 'model';
+      this.measuredMessage(
+        'No readings yet - import a CSV or POST to /api/readings, then press M'
+      );
+      this.render();
+      return;
+    }
+    this.renderer.mapMode = next;
+    this.render();
+    this.updateMeasuredPanel();
+  }
+
+  /** The measured-count / mode line in the sidebar. */
+  updateMeasuredPanel() {
+    const panel = document.getElementById('measuredPanel');
+    if (!panel) return;
+    const measured = this.currentData && this.currentData.measured;
+    const mode = this.renderer.mapMode;
+
+    if (!measured) {
+      panel.innerHTML =
+        '<div class="stat-row"><span>Readings</span><span>none</span></div>' +
+        '<div class="hint">Import a CSV or POST to /api/readings, then press M.</div>';
+      return;
+    }
+    const gaps = measured.grid.filter((c) => c.hasData === false).length;
+    const rmse = measured.rmseDb;
+    panel.innerHTML =
+      `<div class="stat-row"><span>Readings</span><span>${measured.count}</span></div>` +
+      `<div class="stat-row"><span>Map layer</span><span>${
+        mode === 'measured' ? 'measured' : 'model'
+      } (M)</span></div>` +
+      // RMSE is against the model currently configured, so it moves when the
+      // sliders move. "n/a" rather than 0 when there is nothing to compare:
+      // zero would read as a perfect match.
+      `<div class="stat-row"><span>Model vs measured</span><span>${
+        rmse === null || rmse === undefined ? 'n/a' : `${rmse} dB RMSE`
+      }</span></div>` +
+      `<div class="stat-row"><span>Cells with data</span><span>${
+        measured.grid.length - gaps
+      }/${measured.grid.length}</span></div>` +
+      (gaps
+        ? `<div class="hint">${gaps} hatched cells have no sample within ${measured.maxDistance} m.</div>`
+        : '') +
+      (measured.dropped
+        ? `<div class="hint">${measured.dropped} older readings dropped by the 5000-point limit.</div>`
+        : '');
+  }
+
+  /**
+   * Say something in the Measured panel.
+   *
+   * The panel, not the console: Logger.warn writes to the developer console,
+   * which the person clicking "Import readings CSV" never has open. A failed
+   * import that reports itself only to devtools looks like nothing happened.
+   */
+  measuredMessage(text) {
+    const panel = document.getElementById('measuredPanel');
+    if (panel)
+      panel.insertAdjacentHTML('beforeend', `<div class="hint">${text}</div>`);
+    Logger.warn(text);
+  }
+
+  /**
+   * Read a local CSV and hand it to the server.
+   *
+   * The file is read here and posted as text: the browser never parses it, so
+   * the server's validation and its 400 messages are the only path, and the
+   * file picker cannot disagree with curl about what is acceptable.
+   */
+  async importCsvFile(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const response = await fetch('/api/import/readings.csv', {
+        method: 'POST',
+        headers: { 'content-type': 'text/csv' },
+        body: text,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        this.measuredMessage(`Import failed: ${body.error || response.status}`);
+        return;
+      }
+      this.measuredMessage(
+        `Imported ${body.imported} readings - press M to view`
+      );
+      this.renderer.mapMode = 'measured';
+      this.render();
+      this.updateMeasuredPanel();
+    } catch (err) {
+      this.measuredMessage(`Import failed: ${err.message}`);
+    }
+  }
+
+  /** Wire the measured-data controls. */
+  initMeasuredControls() {
+    const pick = document.getElementById('csvPicker');
+    const button = document.getElementById('importCsv');
+    const clear = document.getElementById('clearReadings');
+    if (button && pick) button.addEventListener('click', () => pick.click());
+    if (pick)
+      pick.addEventListener('change', (e) =>
+        this.importCsvFile(e.target.files[0])
+      );
+    if (clear)
+      clear.addEventListener('click', () => {
+        this.send({ type: 'clearReadings' });
+        this.renderer.mapMode = 'model';
+        this.render();
+        this.updateMeasuredPanel();
+      });
+  }
+
   setStatusHint() {
     const mode = this.interaction.mode;
     this.statusEl.textContent =

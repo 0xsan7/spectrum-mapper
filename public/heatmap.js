@@ -1,6 +1,12 @@
 class HeatmapRenderer {
   constructor(canvas) {
     this.canvas = canvas;
+    /**
+     * 'model' or 'measured'. Set from the M key. Measured falls back to the
+     * model grid automatically when nothing has been ingested, so the mode
+     * never leaves the map blank with no explanation.
+     */
+    this.mapMode = 'model';
     this.ctx = canvas.getContext('2d', { willReadFrequently: true });
     this.cellAlpha = 200;
     // Room dimensions in metres. Set from each frame, and defaulted here so a
@@ -32,7 +38,18 @@ class HeatmapRenderer {
     this.roomHeight = data.roomHeight;
 
     const { heatmap, roomWidth, roomHeight } = data;
-    this.paintCells(heatmap, roomWidth, roomHeight);
+    // Measured mode swaps which grid is painted, not how it is painted: the
+    // same colour scale and the same cells, so switching modes is comparable.
+    const showingMeasured = this.mapMode === 'measured' && data.measured;
+    this.paintCells(
+      showingMeasured ? data.measured.grid : heatmap,
+      roomWidth,
+      roomHeight,
+      { maskGaps: showingMeasured }
+    );
+    if (showingMeasured) {
+      this.drawSamplePoints(data.measured.points, roomWidth, roomHeight);
+    }
     this.drawGrid(roomWidth, roomHeight);
     this.drawTrails(data.trails || {}, roomWidth, roomHeight);
     this.drawWalls(data.walls || [], roomWidth, roomHeight);
@@ -159,7 +176,7 @@ class HeatmapRenderer {
    * m room that is 300 painted pixels out of 480,000, so the heatmap was mostly
    * empty canvas with sparse dots.
    */
-  paintCells(heatmap, roomWidth, roomHeight) {
+  paintCells(heatmap, roomWidth, roomHeight, options = {}) {
     const cellW = this.canvas.width / roomWidth;
     const cellH = this.canvas.height / roomHeight;
 
@@ -167,18 +184,74 @@ class HeatmapRenderer {
     this.ctx.globalAlpha = this.cellAlpha / 255;
 
     for (const point of heatmap) {
+      const px = Math.floor(point.x * cellW);
+      const py = Math.floor(point.y * cellH);
+      const w = Math.ceil(cellW) + 1;
+      const h = Math.ceil(cellH) + 1;
+
+      // A cell with no sample near it is unknown, not weak. Leave it bare and
+      // hatch it: painting it with the colour for MIN_RSSI would read as "we
+      // measured nothing here", which is a measurement claim.
+      if (options.maskGaps && point.hasData === false) {
+        this.paintNoData(px, py, w, h);
+        continue;
+      }
+      // The model grid has no hasData field at all; only the measured one can
+      // be masked, and a null rssi there is a gap.
+      if (point.rssi === null || point.rssi === undefined) {
+        this.paintNoData(px, py, w, h);
+        continue;
+      }
+
       const [r, g, b] = ColorMapper.getColor(point.rssi);
       this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
       // +1 on each dimension hides the hairline seams between adjacent cells.
-      this.ctx.fillRect(
-        Math.floor(point.x * cellW),
-        Math.floor(point.y * cellH),
-        Math.ceil(cellW) + 1,
-        Math.ceil(cellH) + 1
-      );
+      this.ctx.fillRect(px, py, w, h);
     }
 
     this.ctx.globalAlpha = 1;
+  }
+
+  /**
+   * Diagonal hatch over an unpainted cell: unmistakably "no data" rather than
+   * a colour that happens to look like the low end of the scale.
+   */
+  paintNoData(px, py, w, h) {
+    this.ctx.fillStyle = '#12161c';
+    this.ctx.fillRect(px, py, w, h);
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.rect(px, py, w, h);
+    this.ctx.clip();
+    this.ctx.strokeStyle = 'rgba(120, 132, 145, 0.30)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    for (let d = -h; d < w + h; d += 7) {
+      this.ctx.moveTo(px + d, py);
+      this.ctx.lineTo(px + d + h, py + h);
+    }
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  /** Where the readings were actually taken. */
+  drawSamplePoints(points, roomWidth, roomHeight) {
+    if (!points || !points.length) return;
+    const sx = this.canvas.width / roomWidth;
+    const sy = this.canvas.height / roomHeight;
+    this.ctx.save();
+    for (const p of points) {
+      const cx = p.x * sx;
+      const cy = p.y * sy;
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fill();
+      this.ctx.lineWidth = 1.5;
+      this.ctx.strokeStyle = 'rgba(10, 14, 20, 0.9)';
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
   }
 
   drawGrid(roomWidth, roomHeight) {

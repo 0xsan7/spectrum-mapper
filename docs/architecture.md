@@ -68,5 +68,8 @@ GET  /api/summary                 rolling aggregates over the buffer
 GET  /api/export/timeseries.csv   one row per sample
 GET  /api/export/heatmap.csv      one row per grid cell
 GET  /api/export/readings.csv     per-receiver readings behind the estimate
+GET  /api/export/measured.csv     the readings that were ingested, not the model
 GET  /api/export/frame.json       the whole frame
+POST /api/readings                ingest one reading or an array
+POST /api/import/readings.csv     the same, from a survey file
 ```

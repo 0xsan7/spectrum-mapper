@@ -23,8 +23,11 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── README-hero.md         # how to record the real hero GIF
 │   ├── architecture.md
 │   ├── architecture.svg       # architecture diagram
+│   ├── examples/
+│   │   └── sample-readings.csv
 │   ├── model.md               # path-loss model, in full
 │   ├── performance.md         # measured cost and accuracy
+│   ├── real-data.md
 │   ├── screenshot.png         # the dashboard, captured
 │   ├── structure-banner.svg   # file-system banner
 │   ├── testing.md             # how the suite is run
@@ -63,8 +66,10 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── csv.js                 # CSV formatting for the export API
 │   ├── heatmap.js             # grid generation and statistics
 │   ├── history.js             # rolling time-series buffer
+│   ├── interpolate.js
 │   ├── obstacles.js           # wall geometry and per-crossing attenuation
 │   ├── pathLoss.js            # log-distance model, dBm ↔ linear power
+│   ├── readings.js
 │   ├── receivers.js           # receiver node state
 │   ├── server.js              # Express + ws, state owner, command validation
 │   ├── simulation.js          # transmitter positions, velocity, pinning
@@ -77,8 +82,12 @@ cannot drift. Regenerate with `npm run tree`.
     ├── heatmap.test.js        # grid and statistics
     ├── history.test.js        # buffer, deltas, CSV quoting
     ├── host-default.test.js
+    ├── interpolate.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
+    ├── readings-route.test.js
+    ├── readings.test.js
+    ├── real-data.test.js
     ├── server.test.js         # commands, routes, payload size
     ├── trilateration.test.js  # inversion and degenerate cases
     └── verify-readme.test.js
