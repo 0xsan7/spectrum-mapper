@@ -27,6 +27,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   │   └── sample-readings.csv
 │   ├── model.md               # path-loss model, in full
 │   ├── performance.md         # measured cost and accuracy
+│   ├── real-data.md
 │   ├── screenshot.png         # the dashboard, captured
 │   ├── structure-banner.svg   # file-system banner
 │   ├── testing.md             # how the suite is run

@@ -161,6 +161,7 @@ const DOCS_TABLE = [
   ['Architecture', 'docs/architecture.md'],
   ['Performance', 'docs/performance.md'],
   ['Testing', 'docs/testing.md'],
+  ['Real data', 'docs/real-data.md'],
   ['File tree', 'docs/tree.md'],
   ['Changelog', 'CHANGELOG.md'],
 ];
@@ -295,14 +296,65 @@ for (const e of endpoints) {
 
 // The reverse direction: a route that exists but is undocumented is the more
 // likely drift, since adding an endpoint rarely prompts a README edit.
+//
+// Every HTTP method, not just GET. The first version matched only app.get, so
+// the two ingest routes added later were checked in neither direction: the
+// forward list did not contain them and the reverse scan could not see them.
+// A route nobody documents is exactly the drift this is here to catch.
 const registered = [
   ...new Set(
-    [...serverSrc.matchAll(/app\.get\('(\/api\/[^']+)'/g)].map((m) => m[1])
+    [
+      ...serverSrc.matchAll(
+        /app\.(get|post|put|patch|delete)\(\s*'(\/[^']+)'/g
+      ),
+    ].map((m) => m[2])
   ),
 ];
 for (const e of registered) {
   // Routes are documented in docs/architecture.md, which holds the API table.
   check(`${e} is documented in the docs`, archDoc.includes(e));
+}
+
+// A route the docs claim but the server does not serve is the other direction,
+// and it is what catches a rename that leaves the table behind.
+for (const m of archDoc.matchAll(
+  /(GET|POST|PUT|PATCH|DELETE)\s+(\/[a-zA-Z0-9._/-]+)/g
+)) {
+  check(
+    `${m[2]} is a real route (docs claim ${m[1]})`,
+    registered.includes(m[2])
+  );
+}
+
+// The ingest surface has its own page, and it is linked from the README's Docs
+// table. Both directions.
+check('docs/real-data.md exists', exists('docs/real-data.md'));
+if (exists('docs/real-data.md')) {
+  const realData = read('docs/real-data.md');
+  for (const needle of [
+    '/api/readings',
+    '/api/import/readings.csv',
+    '/api/export/measured.csv',
+  ]) {
+    check(`docs/real-data.md documents ${needle}`, realData.includes(needle));
+  }
+  // The page is only useful with a worked example, and the curl one is the
+  // reason most people will open it.
+  check(
+    'docs/real-data.md has a curl example',
+    /curl[^\n]*\/api\/readings/.test(realData)
+  );
+  // The sketch itself, not the word. Matching /ESP32/ passed even with the
+  // example deleted, because the prose still said ESP32.
+  check(
+    'docs/real-data.md has the ESP32 sketch',
+    /#include\s*<WiFi\.h>/.test(realData) && /HTTPClient/.test(realData)
+  );
+  check('docs/real-data.md states the CSV header', /x,y,rssi/.test(realData));
+  check(
+    'the README links to docs/real-data.md',
+    /\]\(docs\/real-data\.md\)/.test(readme)
+  );
 }
 
 /* ---- npm scripts the README tells people to run ---- */
