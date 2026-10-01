@@ -1,5 +1,6 @@
 const express = require('express');
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
 const RFSimulation = require('./simulation');
@@ -10,6 +11,7 @@ const Trilateration = require('./trilateration');
 const PathLossModel = require('./pathLoss');
 const History = require('./history');
 const CSV = require('./csv');
+const Readings = require('./readings');
 const { CONFIG } = require('./config/constants');
 
 const app = express();
@@ -28,6 +30,9 @@ const obstacles = new Obstacles();
 // rollover behaviour can be exercised without waiting two minutes.
 const HISTORY_CAPACITY = Number(CONFIG.HISTORY_CAPACITY) || 240;
 const history = new History(HISTORY_CAPACITY);
+
+/** Measured readings, bounded. See src/readings.js. */
+const readings = new Readings.ReadingsStore();
 
 /**
  * Sequence number of the last history sample sent to clients. A sequence
@@ -450,6 +455,73 @@ app.get('/api/export/frame.json', (req, res) => {
   });
 });
 
+/* ---- ingest measured readings ---- */
+
+/**
+ * Reject an unauthenticated ingest attempt before the body is read, so a bad
+ * token costs nothing.
+ */
+function readingsTokenGuard(req, res, next) {
+  if (readingsTokenOk(req)) {
+    next();
+    return;
+  }
+  res
+    .status(401)
+    .json({ error: 'a valid Authorization: Bearer token is required' });
+}
+
+/**
+ * Shared-secret check for the ingest endpoints.
+ *
+ * Timing-safe because the token is compared byte for byte, and a plain
+ * `===` leaks its length and first differing byte through response time.
+ * Returns false when no token is configured, so a local install is open.
+ */
+function readingsTokenOk(req) {
+  const expected = CONFIG.READINGS_TOKEN;
+  if (!expected) return true;
+
+  const header = req.get('authorization') || '';
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  if (!match) return false;
+  return timingSafeEqual(match[1], expected);
+}
+
+function timingSafeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  // Hash first so the comparison is over equal-length buffers; without this a
+  // length mismatch returns early and takes a different time.
+  const ah = crypto.createHash('sha256').update(ab).digest();
+  const bh = crypto.createHash('sha256').update(bb).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
+/**
+ * POST /api/readings - one reading or an array of them.
+ *
+ * Body size is capped before parsing. express.json() will happily buffer a
+ * 500 MB body and then fail on the JSON parse, so the limit has to be a
+ * transport-level one.
+ */
+app.post(
+  '/api/readings',
+  readingsTokenGuard,
+  express.json({ limit: Readings.LIMITS.MAX_BODY_BYTES }),
+  (req, res) => {
+    const result = Readings.validatePayload(req.body);
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    const added = readings.add(result.points);
+    res
+      .status(201)
+      .json({ accepted: added.stored, ...added, readings: readings.size });
+  }
+);
+
 app.get('/api/summary', (req, res) => {
   const frame = requireFrame(res);
   if (!frame) return;
@@ -490,6 +562,7 @@ module.exports = {
   receivers,
   obstacles,
   history,
+  readings,
   params,
   handleCommand,
   updateSimulation,
