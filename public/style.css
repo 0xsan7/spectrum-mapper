@@ -527,3 +527,37 @@ button:hover {
 button:active {
   transform: translateY(1px);
 }
+
+/*
+ * Shown only when the server reports demo mode. Deliberately loud: a shared
+ * room is a surprising thing to walk into, and a visitor should not have to
+ * work out why their dragging had no effect.
+ */
+.demo-banner {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid #d08700;
+  border-radius: 4px;
+  background: rgba(208, 135, 0, 0.12);
+  color: #f0b429;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Public-demo banner. Hidden until the server reports demo mode, so a normal
+   install shows nothing and loses no vertical space to it. */
+.demo-banner {
+  margin: 0 0 0.6rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #6b5518;
+  border-radius: 4px;
+  background: #2a2410;
+  color: #f3d98b;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* Explicit, so the attribute always wins over the display rules above. */
+.demo-banner[hidden] {
+  display: none;
+}

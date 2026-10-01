@@ -76,6 +76,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   └── trilateration.js       # RSSI → range → position
 └── 🧪 test/
     ├── browser.test.js        # browser logic loaded into a VM
+    ├── demo-mode.test.js
     ├── diagrams.test.js
     ├── fixtures/
     │   └── malformed.svg

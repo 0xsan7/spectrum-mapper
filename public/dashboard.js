@@ -74,6 +74,7 @@ class Dashboard {
     this.render();
     this.updateSidebar();
     this.updateMeasuredPanel();
+    this.updateDemoBanner(data);
     this.updateTracking();
     this.updateCoverage();
     this.updateChart();
@@ -289,6 +290,22 @@ class Dashboard {
         this.render();
         this.updateMeasuredPanel();
       });
+  }
+
+  /**
+   * Say, plainly, that this is a shared room.
+   *
+   * A visitor who drags a transmitter and sees nothing move, or sees someone
+   * else's layout appear, needs to know why. The banner is on the server's
+   * frame rather than baked into the page, so the same build is correct whether
+   * it is running as a demo or not.
+   */
+  updateDemoBanner(data) {
+    const banner = document.getElementById('demoBanner');
+    if (!banner) return;
+    // The wording stays in index.html so the notice reads correctly even
+    // before this first frame arrives; here it is only shown or hidden.
+    banner.hidden = !(data && data.demo);
   }
 
   setStatusHint() {

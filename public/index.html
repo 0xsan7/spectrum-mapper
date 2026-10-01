@@ -15,6 +15,12 @@
         <div class="status"><span id="statusText">Initializing...</span></div>
       </header>
 
+      <!-- Public-demo notice. Revealed by dashboard.js only when the server
+           reports demo mode, so a normal install shows nothing. -->
+      <p id="demoBanner" class="demo-banner" hidden>
+        Public demo: everyone shares the same simulated room.
+      </p>
+
       <main>
         <div class="map-section">
           <h2>Signal Heatmap</h2>
