@@ -29,10 +29,36 @@ README made claims that had never been measured.
   export.
 - **Obstacle-aware heatmap.** Finite-thickness attenuation folded into the
   grid rather than being a display-only effect.
+- **A CI matrix on Node 22 and 24** on `ubuntu-24.04`, covering lint, format,
+  tests, diagram validation and a production dependency audit.
+- **A Docker image, built and health-checked in CI.** The job builds the image,
+  runs it detached on port 3000, polls `/api/summary` for up to 30 seconds and
+  prints the container logs if it never answers, always stopping it afterwards.
+  Building the image is not the same as proving it runs.
+- **A dashboard screenshot** at `docs/screenshot.png`, captured from a running
+  server rather than drawn to look like one.
+- **`CHANGELOG.md`, `CONTRIBUTING.md` and the `docs/` pages**: model,
+  architecture, performance, testing, the generated file tree, and the
+  self-contained architecture diagram and structure banner.
 
 ### Fixed
 
 Bugs found while doing the above, each with a test that fails without the fix.
+
+- **The dBm legend fell below the fold.** `#heatmapCanvas` was `width: 100%`
+  with no height limit, so the 4:3 canvas grew off the column width and pushed
+  the legend out of view — 158px below a 1440x800 viewport and 134px below
+  1366x768. The README had been claiming a legend the whole time.
+- **The canvas now fits the viewport and keeps 4:3.** The cap needs a definite
+  height on `.container` to resolve against or it silently does nothing, and
+  the canvas uses `max-width`/`max-height` with both axes `auto` so it scales
+  by the same factor on each. Pinning one axis and clamping only the other
+  squashed the 20x15 m room to 2.04:1.
+- **README claims are checked against the code.** The verifier reads each
+  figure from the file that now owns it, and fails loudly when that file is
+  missing instead of matching nothing. Timing comparisons are local-only behind
+  `--timings`, since the runner is not the authoring machine; the
+  deterministic accuracy figures stay in CI.
 
 - **Path loss could report impossible values.** The old model produced a cell
   reading above its own transmitter's power.
@@ -67,10 +93,17 @@ Bugs found while doing the above, each with a test that fails without the fix.
 - **Express 4 → 5.2.1**, which removes the vulnerable `qs` behaviour from the
   dependency tree. Production audit is clean.
 - **Server modules moved under `src/`.**
-- **CI runs on Node 22 and 24** on `ubuntu-24.04`. Node 20 reached end of life
-  and cannot run the suite: `node --test` only expands its own glob patterns
-  from Node 22, so on 20 the pattern was treated as a literal path and no test
-  ran at all.
+- **`engines.node` now requires `>=22`.** Node 20 reached end of life and
+  cannot run the suite: `node --test` only expands its own glob patterns from
+  Node 22, so on 20 the pattern was treated as a literal path and no test ran at
+  all — silently, with a passing command.
+- **The server binds `127.0.0.1` by default.** It previously bound every
+  interface, putting an unauthenticated control surface on the local network.
+  The Docker image sets `HOST=0.0.0.0`, because a published port cannot reach a
+  loopback-bound process; set `HOST=0.0.0.0` yourself to expose it locally.
+- **The README was restructured.** The model, performance and testing detail
+  moved into `docs/` behind one Docs table, taking the front page from 446 lines
+  to under 200.
 - **WebSocket parameters are validated against an explicit allowlist** rather
   than an object-membership check, which accepted `__proto__`.
 - **History uses monotonic sequence IDs** instead of array indices.
@@ -84,8 +117,9 @@ Claims and code that could not be supported:
   documented but did not exist. Replaced with measured numbers from
   `scripts/benchmark.js`.
 - **A placeholder "demo" image.** The README showed a grey block where a
-  recording would go. It implied a demo existed. There is now no image and a
-  comment saying so.
+  recording would go, implying a demo existed. Replaced by a real screenshot of
+  the running app; the README still states plainly that no demo has been
+  recorded, because a screenshot is not a recording.
 - **A dead performance predictor** and its prototype files.
 - **A frame-cost badge**, which invited readers to compare a figure measured
   on one machine against their own.
@@ -99,9 +133,6 @@ The verifiers had bugs of their own, each caught only after being shown to fail:
 - The check that a diagram's XML was well formed shelled out to `xmllint`,
   which is absent from GitHub's runner image, and its fallback was unreachable
   code. Validation now runs in Node with no external binary.
-- Timing comparisons failed on GitHub because the runner was faster than the
-  authoring machine. They are now local-only behind `--timings`; the
-  deterministic accuracy figures stay in CI.
 - The diagram's path-loss formula omitted the reference loss and the wall term,
   and the check that guarded it only matched its first three terms.
 
