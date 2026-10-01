@@ -829,6 +829,86 @@ if (!block) {
   }
 }
 
+/* ---- the npm listing metadata ----
+ *
+ * package.json's description is what npm and GitHub show, and the README tagline
+ * is what a reader sees on the page. They describe the same project, so the
+ * README's key phrase has to appear in the description - otherwise the two
+ * drift and the registry says one thing while the repo says another.
+ *
+ * The URLs are checked too, because they are easy to get wrong in a way that
+ * still looks plausible: an ssh remote that does not exist, or a bugs URL
+ * pointing somewhere harmless.
+ */
+{
+  const meta = JSON.parse(read('package.json'));
+  const desc = (meta.description || '').trim();
+  check('package.json description is non-empty', desc.length > 20, desc);
+  check(
+    'package.json description mentions trilateration',
+    /trilateration/i.test(desc)
+  );
+
+  // The README's tagline, read from the centred line under the title.
+  const tagline =
+    (readme.match(/<p align="center">\s*([^<\n]+?)\s*<\/p>/) || [])[1] || '';
+  const keyPhrase = tagline.match(
+    /(\d+\.\d+\s*GHz\s+RF\s+coverage\s+simulator)/i
+  );
+  check(
+    'README has a tagline with the key phrase',
+    keyPhrase !== undefined,
+    tagline ? `tagline reads: ${tagline}` : 'no tagline found'
+  );
+  if (keyPhrase) {
+    check(
+      `package.json description carries the tagline phrase ("${keyPhrase[1]}")`,
+      desc.toLowerCase().includes(keyPhrase[1].toLowerCase()),
+      `description: ${desc}`
+    );
+  }
+
+  const repoUrl = meta.repository?.url || '';
+  const homepage = meta.homepage || '';
+  const bugs = meta.bugs?.url || '';
+  check('package.json has a repository URL', /spectrum-mapper/.test(repoUrl));
+  check(
+    'repository URL is a real https git URL',
+    /^git\+https:\/\/github\.com\/0xsan7\/spectrum-mapper(\.git)?$/.test(
+      repoUrl
+    ),
+    repoUrl
+  );
+  check(
+    'homepage points at the README',
+    homepage === 'https://github.com/0xsan7/spectrum-mapper#readme',
+    homepage
+  );
+  check(
+    'bugs URL is the issues page',
+    bugs === 'https://github.com/0xsan7/spectrum-mapper/issues',
+    bugs
+  );
+  check('package.json has an author', (meta.author || '').trim().length > 0);
+
+  const kws = meta.keywords || [];
+  check(
+    'package.json has keywords',
+    kws.length >= 10,
+    `${kws.length} keywords`
+  );
+  check(
+    'keywords are lower-case and hyphenated',
+    kws.every((k) => /^[a-z0-9-]+$/.test(k)),
+    kws.filter((k) => !/^[a-z0-9-]+$/.test(k)).join(', ')
+  );
+  // npm truncates a keywords list at 5 per field and this one fits, but a
+  // keyword the README never mentions is dead weight in the listing.
+  for (const k of ['rssi', 'heatmap', 'trilateration', 'path-loss']) {
+    check(`keyword "${k}" is used in the project`, kws.includes(k));
+  }
+}
+
 console.log('\nSupported Node versions');
 {
   const pkg = JSON.parse(read('package.json'));
