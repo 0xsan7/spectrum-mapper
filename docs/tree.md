@@ -65,6 +65,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── csv.js                 # CSV formatting for the export API
 │   ├── heatmap.js             # grid generation and statistics
 │   ├── history.js             # rolling time-series buffer
+│   ├── interpolate.js
 │   ├── obstacles.js           # wall geometry and per-crossing attenuation
 │   ├── pathLoss.js            # log-distance model, dBm ↔ linear power
 │   ├── readings.js
@@ -80,6 +81,7 @@ cannot drift. Regenerate with `npm run tree`.
     ├── heatmap.test.js        # grid and statistics
     ├── history.test.js        # buffer, deltas, CSV quoting
     ├── host-default.test.js
+    ├── interpolate.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
     ├── readings-route.test.js

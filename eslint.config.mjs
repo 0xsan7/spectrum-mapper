@@ -22,7 +22,7 @@ const BROWSER_CONSUMERS = {
   Controls: ['public/dashboard.js'], // controls.js
   RssiChart: ['public/dashboard.js'], // chart.js
   ExportManager: ['public/dashboard.js'], // export.js
-  Logger: ['public/websocket.js'], // logger.js
+  Logger: ['public/websocket.js', 'public/dashboard.js'], // logger.js
   Throttle: ['public/controls.js'], // performance.js
   spectrumAnalyzer: ['public/dashboard.js'], // spectrum-analysis.js
   Dashboard: ['public/responsive.js', 'public/shortcuts.js'], // dashboard.js

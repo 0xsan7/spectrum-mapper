@@ -71,6 +71,16 @@
           </section>
 
           <section class="panel">
+            <h3>Measured</h3>
+            <div id="measuredPanel"></div>
+            <div class="export-buttons">
+              <input type="file" id="csvPicker" accept=".csv,text/csv" hidden />
+              <button id="importCsv" type="button">Import readings CSV</button>
+              <button id="clearReadings" type="button">Clear readings</button>
+            </div>
+          </section>
+
+          <section class="panel">
             <h3>
               RSSI over time
               <span class="chart-legend">

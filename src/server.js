@@ -12,6 +12,7 @@ const PathLossModel = require('./pathLoss');
 const History = require('./history');
 const CSV = require('./csv');
 const Readings = require('./readings');
+const Interpolate = require('./interpolate');
 const { CONFIG } = require('./config/constants');
 
 const app = express();
@@ -73,6 +74,36 @@ const LIMITS = {
   noise: { min: 0, max: 20, step: 0.5 },
   paused: { min: 0, max: 1, step: 1 },
 };
+
+/**
+ * Measured grid, recomputed only when the store actually changes.
+ *
+ * updateSimulation runs twice a second and the grid is 300 cells over 8
+ * neighbours each, so rebuilding it on every tick would be pure waste - and it
+ * is stable data. Keyed on the store's accepted counter, which only advances
+ * when something was stored.
+ */
+let measuredCache = { key: -1, value: null };
+
+function measuredData() {
+  if (readings.size === 0) {
+    measuredCache = { key: -1, value: null };
+    return null;
+  }
+  if (measuredCache.key !== readings.accepted) {
+    measuredCache = {
+      key: readings.accepted,
+      value: {
+        grid: Interpolate.generateGrid(readings.all()),
+        points: readings.all(),
+        count: readings.size,
+        maxDistance: Interpolate.IDW.MAX_DISTANCE,
+        dropped: readings.dropped,
+      },
+    };
+  }
+  return measuredCache.value;
+}
 
 let simulationData = null;
 // Set by start(). Kept module-level so shutdown() can clear it. It is
@@ -233,6 +264,10 @@ function updateSimulation(full = false) {
     bounds: { min: CONFIG.MIN_RSSI, max: CONFIG.MAX_RSSI },
     roomWidth: CONFIG.ROOM_WIDTH,
     roomHeight: CONFIG.ROOM_HEIGHT,
+    // null until something has been ingested. The browser checks for null
+    // rather than for an empty array: "no measurements yet" and "measurements
+    // that cover none of this room" are different states.
+    measured: measuredData(),
   };
 
   history.push(simulationData);
@@ -339,6 +374,11 @@ function handleCommand(msg) {
       params.exponent = 2.7;
       params.frequency = 2437;
       params.noise = 3;
+      return null;
+
+    case 'clearReadings':
+      readings.clear();
+      measuredCache = { key: -1, value: null };
       return null;
 
     case 'clearHistory':
@@ -450,6 +490,10 @@ app.get('/api/export/frame.json', (req, res) => {
     walls: frame.walls,
     tracking: frame.tracking,
     heatmap: frame.heatmap,
+    // The export is documented as the full frame, so the measured layer rides
+    // along. Without it a scripted consumer of frame.json could see the model
+    // grid and no way to tell it apart from real measurements.
+    measured: frame.measured,
     history: history.series(),
     summary: history.summary(),
   });
