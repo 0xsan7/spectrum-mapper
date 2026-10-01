@@ -13,7 +13,13 @@ body {
 .container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* A definite height, not min-height. With min-height the container grows to
+     whatever the content needs, so main's height is content-driven and a
+     percentage max-height on the canvas has nothing definite to resolve
+     against - the cap silently does nothing. The sidebar already scrolls
+     internally (overflow-y: auto), so nothing needs the page to grow. */
+  height: 100vh;
+  overflow: hidden;
 }
 
 header {
@@ -47,9 +53,14 @@ header p {
 main {
   display: flex;
   flex: 1;
+  /* Without this, main cannot shrink below its content and the canvas cap
+     never engages - the flex base size wins. */
+  min-height: 0;
   gap: 16px;
   padding: 16px;
-  align-items: flex-start;
+  /* stretch, not flex-start: each column needs a definite height for the
+     canvas's percentage max-height to resolve. */
+  align-items: stretch;
 }
 
 /* ---- map ---- */
@@ -57,6 +68,9 @@ main {
 .map-section {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .map-section h2 {
@@ -70,6 +84,18 @@ main {
 .canvas-wrapper {
   position: relative;
   width: 100%;
+  /* Takes whatever the viewport has left after the heading, the legend and the
+     hint. min-height:0 lets it go below its content size, which is what makes
+     the canvas inside it shrink instead of pushing the legend off-screen. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  /* Centres the canvas once it is height-capped. align-items matters: the
+     default is stretch, and in a row-direction flex container the cross axis
+     is vertical, so the canvas gets pulled to the wrapper's full height and
+     the 4:3 map renders at 2:1. */
+  justify-content: center;
+  align-items: center;
   background: #000;
   border: 1px solid #333;
   border-radius: 4px;
@@ -78,7 +104,15 @@ main {
 
 #heatmapCanvas {
   display: block;
-  width: 100%;
+  /* The room is 20x15 m, so 4:3. Both dimensions auto with both maxes is the
+     replaced-element fit-inside pattern: the canvas is scaled by the same
+     factor on each axis, so the map stays in proportion. Setting width:100%
+     instead pins one axis and lets the other be clamped, which stretches the
+     room - measured at 2:1 before this. */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   cursor: grab;
   /* Stop the browser scrolling the page while dragging a marker. */
   touch-action: none;
@@ -116,6 +150,9 @@ main {
 
 .legend {
   margin-top: 10px;
+  /* flex-shrink:0 so the canvas area gives up height first. Without it a very
+     short viewport squeezes the legend - the exact thing this fixes. */
+  flex-shrink: 0;
 }
 
 .legend-bar {
@@ -157,9 +194,19 @@ body.narrow main {
   flex-direction: column;
 }
 
+/* Stacked layout undoes the viewport cap. A map and a sidebar one above the
+   other cannot both fit a phone-shaped viewport, and with the container
+   clipped to 100vh the sidebar below the map would simply be unreachable. */
+body.narrow .container {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
 body.narrow .info-section {
   width: 100%;
   max-height: none;
+  overflow-y: visible;
 }
 
 .panel {
