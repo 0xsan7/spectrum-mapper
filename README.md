@@ -187,6 +187,10 @@ Roughly in the order I expect to do them.
       compare a later walk against it
 - [ ] **Faster grid** — spatial partitioning so resolution can go well past 1 m
       without the frame budget moving
+- [ ] **Real-data mode** — `POST /api/readings` to push measured RSSI, CSV import,
+      and an interpolated map built from real samples instead of the model
+- [ ] **Dead-zone detector** — find the areas coverage cannot reach, and suggest
+      where to move or add a router to close them
 - [ ] **Recorded demo GIF** — an actual capture of the app, none exists yet
 - [ ] **A real accuracy metric** for when there is no simulated truth
 
