@@ -113,8 +113,13 @@ Real process environment variables take precedence over `.env`.
 
 ## The model
 
-Signal is modelled with a log-distance path-loss law, reference loss normalised
-by distance, wall attenuation, and fading — see [docs/model.md](docs/model.md).
+```
+RSSI = Tx - PL(d0) - 10·n·log10(d/d0) - walls - fading
+```
+
+Transmit power, minus free-space loss at the reference distance, minus the
+distance-dependent growth, minus whatever the walls and fading take away. Full
+derivation in [docs/model.md](docs/model.md).
 
 ## Architecture
 

@@ -462,11 +462,15 @@ if (arch) {
     formulaRe.test(formula(archDoc)),
     'the fallback must match the diagram'
   );
-  // There is deliberately no "README states the formula" check. The front
-  // page's model section is a two-line summary that links to docs/model.md;
-  // there is no formula on it to drift. The two places that do state the
-  // expression - docs/model.md and docs/architecture.md - are each checked
-  // against the diagram above.
+  // The front page states the formula itself, in a fenced block under "The
+  // model", so it is checked against the diagram like every other copy. An
+  // earlier revision of this branch had no formula on the front page and no
+  // check either; this one came back when the formula did.
+  check(
+    'README model section states the full formula',
+    formulaRe.test(formula(readme)),
+    'the fenced formula must match the diagram'
+  );
   check(
     'docs/model.md derives the same expression',
     formulaRe.test(formula(modelDoc)),
