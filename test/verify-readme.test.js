@@ -105,3 +105,31 @@ test('the accuracy module is deterministic', () => {
     b.bands.map((x) => x.mean)
   );
 });
+
+test("package.json and the CHANGELOG's top heading name the same release", () => {
+  // The invariant, asserted directly rather than by trusting the verifier: a
+  // version bump in package.json without a matching changelog heading ships
+  // release notes that describe a version nobody is on.
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+  );
+  const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+  const headings = [...changelog.matchAll(/^##\s+\[?([\d.]+)\]?/gm)].map(
+    (m) => m[1]
+  );
+  assert.ok(headings.length > 0, 'no version heading found in CHANGELOG.md');
+  assert.strictEqual(
+    headings[0],
+    pkg.version,
+    `CHANGELOG.md top heading is ${headings[0]}, package.json says ${pkg.version}`
+  );
+});
+
+test('the verifier checks that pairing itself', () => {
+  // Otherwise the check above is the only thing standing between a version bump
+  // and an inconsistent release, and deleting the verifier check would go
+  // unnoticed.
+  const src = fs.readFileSync(VERIFY, 'utf8');
+  assert.match(src, /newest entry matches package\.json/);
+  assert.match(src, /pkg\.version/);
+});
