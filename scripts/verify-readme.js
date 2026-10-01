@@ -820,11 +820,57 @@ if (!block) {
     );
 
     // The image has to opt in, or `docker run -p 3000:3000` connects to nothing.
+    //
+    // Matched against the ENV instruction rather than the bare string: a
+    // `/HOST=0\.0\.0\.0/` test also matches a comment saying the value used to
+    // be there, which is precisely the case worth catching. Reinstating it as
+    // prose is how the setting silently disappears.
     const dockerfile = read('Dockerfile');
+    // ENV spans continuation lines:
+    //   ENV NODE_ENV=production \
+    //       PORT=3000 \
+    //       HOST=0.0.0.0
+    // so collect the instruction plus every line the previous one continues
+    // into, then split it into KEY=VALUE pairs. A single regex over the raw
+    // text stops at the first backslash, which silently drops HOST.
+    const envPairs = (() => {
+      const lines = dockerfile.split('\n');
+      const start = lines.findIndex((l) => /^ENV\s/.test(l));
+      if (start === -1) return [];
+      const block = [lines[start].replace(/^ENV\s+/, '')];
+      for (let k = start + 1; k < lines.length; k++) {
+        if (!/\\\s*$/.test(lines[k - 1])) break;
+        block.push(lines[k]);
+      }
+      return block
+        .join(' ')
+        .replace(/\\/g, ' ')
+        .split(/\s+/)
+        .map((p) => p.replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+    })();
+    const envHost = envPairs.find((p) => p.startsWith('HOST='));
     check(
-      'the Dockerfile overrides HOST for the container',
-      /HOST=0\.0\.0\.0/.test(dockerfile),
-      'loopback is unreachable from outside a container'
+      'the Dockerfile has an ENV instruction',
+      envPairs.length > 0,
+      'expected an ENV block'
+    );
+    check(
+      'the Dockerfile ENV sets HOST=0.0.0.0',
+      envHost === 'HOST=0.0.0.0',
+      `ENV carries ${envHost || 'no HOST at all'}`
+    );
+    check(
+      'the Dockerfile ENV still sets PORT=3000',
+      envPairs.includes('PORT=3000'),
+      `ENV pairs: ${envPairs.join(', ')}`
+    );
+    // And the whole point: the code's own default must still be loopback, or
+    // this override is redundant and the safety came from somewhere else.
+    check(
+      'the code default is still loopback, so the override is load-bearing',
+      defaultHost === '127.0.0.1',
+      `CONFIG.HOST defaults to ${defaultHost}`
     );
   }
 }
