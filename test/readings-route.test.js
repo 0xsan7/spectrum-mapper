@@ -69,6 +69,39 @@ function startServer(env = {}) {
   });
 }
 
+/**
+ * Fetch the exported frame, waiting for the first broadcast.
+ *
+ * The export routes answer 503 until updateSimulation has run once, which is
+ * UPDATE_RATE after the server says it is listening. Fetching straight after
+ * startup therefore returns {error: 'no frame yet'}, and a test asserting on
+ * frame.measured saw undefined and concluded the field was missing.
+ */
+async function waitForFrame(port, predicate, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    last = await getFrame(port, Math.max(200, deadline - Date.now()));
+    if (predicate(last)) return last;
+    await new Promise((res) => setTimeout(res, 100));
+  }
+  throw new Error(
+    `frame never satisfied the predicate: ${JSON.stringify(last).slice(0, 200)}`
+  );
+}
+
+async function getFrame(port, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    const r = await fetch(`http://127.0.0.1:${port}/api/export/frame.json`);
+    if (r.status === 200) return r.json();
+    last = await r.json().catch(() => ({}));
+    await new Promise((res) => setTimeout(res, 100));
+  }
+  throw new Error(`no frame appeared: ${JSON.stringify(last)}`);
+}
+
 const post = (port, path, body, headers = {}) =>
   fetch(`http://127.0.0.1:${port}${path}`, {
     method: 'POST',
@@ -369,6 +402,169 @@ test('GET is not allowed on the import route', async () => {
     const r = await fetch(`http://127.0.0.1:${s.port}/api/import/readings.csv`);
     assert.strictEqual(r.status, 404);
   } finally {
+    s.stop();
+  }
+});
+
+test('the measured export returns the readings that were ingested', async () => {
+  const s = await startServer();
+  try {
+    await post(s.port, '/api/readings', [
+      { x: 1, y: 2, rssi: -50 },
+      { x: 3, y: 4, rssi: -60 },
+    ]);
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/export/measured.csv`);
+    assert.strictEqual(r.status, 200);
+    assert.match(r.headers.get('content-type'), /text\/csv/);
+    const text = await r.text();
+    const lines = text.trim().split('\n');
+    assert.strictEqual(lines[0], 'x,y,rssi');
+    assert.strictEqual(lines.length, 3);
+    // Round-trippable: what comes out can go back in.
+    const back = await postCsv(s.port, text);
+    assert.strictEqual(back.status, 201);
+  } finally {
+    s.stop();
+  }
+});
+
+test('the measured export is a header-only file when nothing was ingested', async () => {
+  const s = await startServer();
+  try {
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/export/measured.csv`);
+    // Not a 404: asking for measurements when there are none is a state, not a
+    // missing resource.
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual((await r.text()).trim(), 'x,y,rssi');
+  } finally {
+    s.stop();
+  }
+});
+
+test('the measured export is not the model heatmap', async () => {
+  const s = await startServer();
+  try {
+    await post(s.port, '/api/readings', [{ x: 10, y: 7.5, rssi: -58 }]);
+    const measured = await (
+      await fetch(`http://127.0.0.1:${s.port}/api/export/measured.csv`)
+    ).text();
+    const heatmap = await (
+      await fetch(`http://127.0.0.1:${s.port}/api/export/heatmap.csv`)
+    ).text();
+    assert.notStrictEqual(measured, heatmap);
+    assert.strictEqual(measured.trim().split('\n').length, 2);
+  } finally {
+    s.stop();
+  }
+});
+
+test('the frame carries the measured layer with an RMSE once readings exist', async () => {
+  const s = await startServer();
+  try {
+    const before = await getFrame(s.port);
+    assert.strictEqual(
+      before.measured,
+      null,
+      'no readings means no measured layer'
+    );
+
+    await post(s.port, '/api/readings', [
+      { x: 4, y: 4, rssi: -60 },
+      { x: 14, y: 10, rssi: -55 },
+    ]);
+    // A frame is a snapshot built at broadcast time, so the POST is not visible
+    // in it until the next update tick. Fetching straight after the 201 saw
+    // measured:null again and read as "the ingest did nothing".
+    const after = await waitForFrame(
+      s.port,
+      (f) => f.measured && f.measured.count === 2
+    );
+    assert.ok(after.measured, 'measured layer should exist');
+    assert.strictEqual(after.measured.count, 2);
+    assert.strictEqual(after.measured.points.length, 2);
+    assert.ok(
+      typeof after.measured.rmseDb === 'number',
+      'RMSE should be a number'
+    );
+    // The sample points sit far from the transmitters, so the model and the
+    // readings cannot agree exactly; the figure must be a real number, not 0.
+    assert.ok(after.measured.rmseDb > 0, `RMSE was ${after.measured.rmseDb}`);
+  } finally {
+    s.stop();
+  }
+});
+
+test('the measured export needs no token even when one is set', async () => {
+  const s = await startServer({ READINGS_TOKEN: 'secret' });
+  try {
+    // Exporting is a read of what is already there; only ingest is guarded.
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/export/measured.csv`);
+    assert.strictEqual(r.status, 200);
+  } finally {
+    s.stop();
+  }
+});
+
+test('the export routes answer 503 until the first frame exists', async () => {
+  // The behaviour the wait helper works around, pinned so it stays deliberate.
+  const s = await startServer();
+  try {
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/export/frame.json`);
+    if (r.status === 503) {
+      assert.match((await r.json()).error, /no frame yet/);
+    } else {
+      // A frame already landed; then it must be a usable frame.
+      assert.strictEqual(r.status, 200);
+    }
+    // Either way, getFrame must eventually return a real frame.
+    const f = await getFrame(s.port);
+    assert.ok(Array.isArray(f.heatmap));
+  } finally {
+    s.stop();
+  }
+});
+
+test('the RMSE tracks the model, not just the readings', async () => {
+  // The measured layer is cached so it is not rebuilt twice a second. That cache
+  // is keyed on the accepted-reading count AND the model parameters: key it on
+  // the count alone and moving a slider leaves yesterday's error next to a
+  // heatmap that has already changed. This test only fails for that mistake.
+  const WebSocket = require('ws');
+  const s = await startServer();
+  let socket;
+  try {
+    await post(s.port, '/api/readings', [
+      { x: 4, y: 4, rssi: -60 },
+      { x: 14, y: 10, rssi: -55 },
+    ]);
+    const first = await waitForFrame(s.port, (f) => f.measured);
+    const before = first.measured.rmseDb;
+
+    socket = new WebSocket(`ws://127.0.0.1:${s.port}`);
+    await new Promise((res, rej) => {
+      socket.once('open', res);
+      socket.once('error', rej);
+    });
+    // Sweep the path-loss exponent from one extreme to the other. The model
+    // cannot produce the same RSSI at both, so the error has to move.
+    socket.send(
+      JSON.stringify({ type: 'setParam', key: 'exponent', value: 5 })
+    );
+    socket.send(JSON.stringify({ type: 'setParam', key: 'noise', value: 20 }));
+
+    const after = await waitForFrame(
+      s.port,
+      (f) => f.measured && f.measured.rmseDb !== before,
+      6000
+    ).catch(() => null);
+
+    assert.ok(
+      after,
+      `RMSE never moved from ${before} after changing the model`
+    );
+    assert.notStrictEqual(after.measured.rmseDb, before);
+  } finally {
+    if (socket) socket.close();
     s.stop();
   }
 });

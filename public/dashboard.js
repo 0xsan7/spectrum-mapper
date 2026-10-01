@@ -203,16 +203,26 @@ class Dashboard {
       return;
     }
     const gaps = measured.grid.filter((c) => c.hasData === false).length;
+    const rmse = measured.rmseDb;
     panel.innerHTML =
       `<div class="stat-row"><span>Readings</span><span>${measured.count}</span></div>` +
       `<div class="stat-row"><span>Map layer</span><span>${
         mode === 'measured' ? 'measured' : 'model'
       } (M)</span></div>` +
+      // RMSE is against the model currently configured, so it moves when the
+      // sliders move. "n/a" rather than 0 when there is nothing to compare:
+      // zero would read as a perfect match.
+      `<div class="stat-row"><span>Model vs measured</span><span>${
+        rmse === null || rmse === undefined ? 'n/a' : `${rmse} dB RMSE`
+      }</span></div>` +
       `<div class="stat-row"><span>Cells with data</span><span>${
         measured.grid.length - gaps
       }/${measured.grid.length}</span></div>` +
       (gaps
         ? `<div class="hint">${gaps} hatched cells have no sample within ${measured.maxDistance} m.</div>`
+        : '') +
+      (measured.dropped
+        ? `<div class="hint">${measured.dropped} older readings dropped by the 5000-point limit.</div>`
         : '');
   }
 

@@ -87,18 +87,31 @@ let measuredCache = { key: -1, value: null };
 
 function measuredData() {
   if (readings.size === 0) {
-    measuredCache = { key: -1, value: null };
+    measuredCache = { key: '', value: null };
     return null;
   }
-  if (measuredCache.key !== readings.accepted) {
+  const modelKey = `${readings.accepted}|${params.exponent}|${params.frequency}|${params.noise}`;
+  if (measuredCache.key !== modelKey) {
+    const points = readings.all();
+    // How far the model is from what was actually measured, at the sample
+    // points. This is the number that says whether the simulator is any use for
+    // the room it claims to model - and it is only meaningful against the model
+    // that is currently configured, so it moves when the sliders move.
+    const rmseDb = Interpolate.modelRmseDb(points, (x, y) =>
+      PathLossModel.calculateGridRSSI(x, y, simulation.getSourceData(), {
+        ...currentPathLossOptions(),
+        obstacles,
+      })
+    );
     measuredCache = {
-      key: readings.accepted,
+      key: modelKey,
       value: {
-        grid: Interpolate.generateGrid(readings.all()),
-        points: readings.all(),
+        grid: Interpolate.generateGrid(points),
+        points,
         count: readings.size,
         maxDistance: Interpolate.IDW.MAX_DISTANCE,
         dropped: readings.dropped,
+        rmseDb,
       },
     };
   }
@@ -378,7 +391,7 @@ function handleCommand(msg) {
 
     case 'clearReadings':
       readings.clear();
-      measuredCache = { key: -1, value: null };
+      measuredCache = { key: '', value: null };
       return null;
 
     case 'clearHistory':
@@ -473,6 +486,27 @@ app.get('/api/export/readings.csv', (req, res) => {
     'attachment; filename="spectrum-readings.csv"'
   );
   res.send(CSV.readingsToCsv(frame.tracking));
+});
+
+/**
+ * The readings that came in, in the same format the import accepts, so a survey
+ * can be taken back out and re-imported elsewhere. Deliberately not heatmap.csv:
+ * that is the model's grid, and mixing the two would quietly relabel synthetic
+ * values as measurements.
+ */
+app.get('/api/export/measured.csv', (req, res) => {
+  res.type('text/csv');
+  res.set(
+    'Content-Disposition',
+    'attachment; filename="spectrum-measured.csv"'
+  );
+  const rows = readings
+    .all()
+    .map((p) => `${p.x},${p.y},${p.rssi}`)
+    .join('\n');
+  // A header-only file rather than a 404: asking for the measurements when
+  // there are none is a legitimate state, not a missing resource.
+  res.send(rows ? `x,y,rssi\n${rows}\n` : 'x,y,rssi\n');
 });
 
 /** The full frame as JSON, for scripting or archiving a run. */
