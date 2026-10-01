@@ -67,11 +67,14 @@
        missing-glyph boxes in a bare renderer (confirmed with resvg). The
        README's file tree keeps its emoji, where the surrounding text supplies
        the glyph. -->
+  <!-- Folder counts, minus the test count: that number moves on nearly every
+       commit, and pinning it in the artwork meant editing the SVG to add a
+       test. The README tree carries the same information. -->
   <text x="600" y="116" class="bs" fill="#5f8794" text-anchor="middle">
-    SRC 11 · PUBLIC 17 · TEST 10 · SCRIPTS 6 · DOCS 4
+    SRC 11 · PUBLIC 17 · SCRIPTS 6 · DOCS 8
   </text>
   <text x="600" y="136" class="bs" fill="#2f4a56" text-anchor="middle">
-    counts and tree generated from git ls-files — verify:diagrams checks them
+    src, public, scripts and docs counts follow git ls-files — verify:diagrams checks them
   </text>
 
   <rect width="1200" height="160" fill="url(#bScan)" pointer-events="none"/>

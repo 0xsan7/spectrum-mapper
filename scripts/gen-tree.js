@@ -1,12 +1,12 @@
 /**
- * Generate the project-structure tree for the README from `git ls-files`.
+ * Generate the project-structure tree for docs/tree.md from `git ls-files`.
  *
  * Generated rather than hand-written so it cannot drift: a new module shows up
  * the next time this runs. Excluded: the lockfile (noise at this depth) and
  * anything under node_modules.
  *
  *   node scripts/gen-tree.js          # print the tree
- *   node scripts/gen-tree.js --write  # print, and splice into README.md
+ *   node scripts/gen-tree.js --write  # print, and splice into docs/tree.md
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -60,14 +60,17 @@ const DESCRIPTIONS = {
   'test/history.test.js': 'buffer, deltas, CSV quoting',
   'test/server.test.js': 'commands, routes, payload size',
   'test/browser.test.js': 'browser logic loaded into a VM',
-  'scripts/benchmark.js': 'produces the README performance numbers',
+  'scripts/benchmark.js': 'produces the performance numbers',
   'scripts/verify-readme.js': 'fails when docs drift from code',
   'scripts/gen-tree.js': 'regenerates this tree',
   'scripts/verify-diagrams.js': 'validates the SVG assets',
   'docs/architecture.svg': 'architecture diagram',
   'docs/structure-banner.svg': 'file-system banner',
-  'docs/hero-placeholder.svg': 'hero placeholder',
   'docs/README-hero.md': 'how to record the real hero GIF',
+  CHANGELOG: 'release notes and bug history',
+  'docs/model.md': 'path-loss model, in full',
+  'docs/performance.md': 'measured cost and accuracy',
+  'docs/testing.md': 'how the suite is run',
   '.github/workflows/ci.yml': 'lint, format, test, audit, docs check',
   Dockerfile: 'multi-stage production image',
   '.dockerignore': 'image build context exclusions',
@@ -106,9 +109,14 @@ for (const file of files) {
 
 const lines = [];
 
-function comment(file) {
-  const d = DESCRIPTIONS[file];
-  return d ? `  # ${d}` : '';
+// Comments are aligned into one column across the whole tree. Two passes: build
+// every line first, then pad the name out to the widest one. Padding per-line
+// as the tree is walked cannot work, because a deep file encountered early
+// would set a width that a later, wider name would then exceed.
+const COMMENT_COLUMN_MIN = 2; // at least this many spaces before the '#'
+
+function commentFor(file) {
+  return DESCRIPTIONS[file] || '';
 }
 
 function render(node, prefix, pathSoFar) {
@@ -119,21 +127,39 @@ function render(node, prefix, pathSoFar) {
     const full = pathSoFar ? `${pathSoFar}/${name}` : name;
 
     if (child.isFile) {
-      lines.push(`${prefix}${branch}${name}${comment(full)}`);
+      lines.push({ prefix, branch, name, comment: commentFor(full) });
     } else {
       const emoji = EMOJI[name] ? `${EMOJI[name]} ` : '';
-      lines.push(`${prefix}${branch}${emoji}${name}/`);
+      lines.push({ prefix, branch, name: `${emoji}${name}/`, comment: '' });
       render(child, prefix + (last ? '    ' : '│   '), full);
     }
   });
 }
 
 render(root, '', '');
-const tree = lines.join('\n');
+
+// Second pass: pad every commented line out to the widest name in the tree, so
+// all the '#' markers sit in a single column. Folders carry no comment, so they
+// are left at their natural width and stay flush with the commented rows.
+// Width is measured on the whole rendered head - indent plus branch plus name -
+// not the name alone. Measuring the name put a nested file's comment in a
+// different column from its siblings.
+const headWidth = (l) => `${l.prefix}${l.branch}${l.name}`.length;
+const width = Math.max(
+  COMMENT_COLUMN_MIN,
+  ...lines.filter((l) => l.comment).map(headWidth)
+);
+const tree = lines
+  .map((l) => {
+    const head = `${l.prefix}${l.branch}${l.name}`;
+    if (!l.comment) return head;
+    return `${head}${' '.repeat(width - headWidth(l) + 2)}# ${l.comment}`;
+  })
+  .join('\n');
 
 if (process.argv.includes('--write')) {
-  const readmePath = path.join(ROOT, 'README.md');
-  const readme = fs.readFileSync(readmePath, 'utf8');
+  const targetPath = path.join(ROOT, 'docs/tree.md');
+  const readme = fs.readFileSync(targetPath, 'utf8');
   // The content group must allow an empty block, and the gap after the marker
   // must be tolerant: Prettier inserts a blank line between the HTML comment
   // and the fence, so requiring exactly one newline meant the block could be
@@ -142,12 +168,12 @@ if (process.argv.includes('--write')) {
     /(<!-- tree:start -->\r?\n\s*```text\r?\n)[\s\S]*?(\r?\n?```\r?\n\s*<!-- tree:end -->)/;
   if (!re.test(readme)) {
     console.error(
-      'could not find the <!-- tree:start --> markers in README.md'
+      'could not find the <!-- tree:start --> markers in docs/tree.md'
     );
     process.exit(1);
   }
-  fs.writeFileSync(readmePath, readme.replace(re, `$1${tree}\n$2`));
-  console.error(`README.md tree updated (${lines.length} lines)`);
+  fs.writeFileSync(targetPath, readme.replace(re, `$1${tree}\n$2`));
+  console.error(`docs/tree.md tree updated (${lines.length} lines)`);
 }
 
 console.log(tree);

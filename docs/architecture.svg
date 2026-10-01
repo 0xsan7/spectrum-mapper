@@ -48,6 +48,9 @@
     .lbl  { font-size: 11px; letter-spacing: 0.14em; }
     .ttl  { font-size: 13px; letter-spacing: 0.20em; font-weight: 700; }
     .det  { font-size: 9.5px; letter-spacing: 0.02em; }
+    /* The full path-loss formula is long; it needs to fit inside a 276px
+       panel, which 9.5px overshoots by ~30px. */
+    .fx   { font-size: 8px; letter-spacing: 0; }
     .num  { font-size: 10px; letter-spacing: 0.06em; }
     .tiny { font-size: 8.5px; letter-spacing: 0.10em; }
     /* Transmitter labels sit in a narrow column between the dots and the
@@ -169,7 +172,7 @@
     <!-- Path loss -->
     <rect x="138" y="242" width="276" height="70" rx="2" class="box" stroke="#00e5ff" stroke-opacity="0.7"/>
     <text x="150" y="262" class="lbl" fill="#00e5ff">PATH LOSS</text>
-    <text x="150" y="279" class="det" fill="#9fd8e8">RSSI = Tx − 10n·log₁₀(d) − fading</text>
+    <text x="150" y="279" class="fx" fill="#9fd8e8">RSSI = Tx − PL(d₀) − 10n·log₁₀(d/d₀) − walls − fading</text>
     <text x="150" y="293" class="det" fill="#5f8794">n = 2.7 · f = 2437 MHz · d₀ = 1 m</text>
     <text x="150" y="306" class="det" fill="#5f8794">combined in linear power, not dBm</text>
 
@@ -287,7 +290,7 @@
   <!-- ===== footer ===== -->
   <line x1="360" y1="540" x2="840" y2="540" stroke="#00e5ff" stroke-opacity="0.3"/>
   <text x="600" y="560" class="det" fill="#7f9aa8" text-anchor="middle">
-    RSSI = Tx − 10n·log₁₀(d/d₀) − PL(d₀) − wallLoss − fading
+    RSSI = Tx − PL(d₀) − 10n·log₁₀(d/d₀) − walls − fading
   </text>
   <text x="600" y="578" class="det" fill="#4a7a8a" text-anchor="middle">
     sources combine in linear power · two receivers cannot disambiguate a mirrored position

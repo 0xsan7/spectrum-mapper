@@ -14,6 +14,24 @@ const exists = (p) => fs.existsSync(path.join(ROOT, p));
 const readme = read('README.md');
 const pkg = JSON.parse(read('package.json'));
 
+/* ---- the split-out documentation ----
+ *
+ * "The model", "Performance" and "Testing" live in docs/ so the front page can
+ * be read in a minute. That means several claims are no longer in README.md,
+ * and a verifier that kept looking there would report them missing - or worse,
+ * quietly skip them.
+ *
+ * These files are required. A missing one is a failure, never an empty string
+ * that every regex then declines to match: an absent document would otherwise
+ * turn a dozen checks green by having nothing to say.
+ */
+const DOCS = {
+  'docs/model.md': null,
+  'docs/performance.md': null,
+  'docs/testing.md': null,
+  'docs/architecture.md': null,
+};
+
 let failures = 0;
 function check(label, ok, detail) {
   if (ok) {
@@ -26,25 +44,130 @@ function check(label, ok, detail) {
 
 console.log('README claims vs reality');
 
-/* ---- test count ---- */
-const testCount = fs
-  .readdirSync(path.join(ROOT, 'test'))
-  .filter((f) => f.endsWith('.test.js'))
-  .reduce((acc, f) => {
-    const src = read(`test/${f}`);
-    return acc + (src.match(/^test\(/gm) || []).length;
-  }, 0);
-const claimedTests = Number(
-  (readme.match(/(\d+) tests, no watch mode/) || [])[1]
+/* ---- load the split-out docs, failing loudly if any is absent ---- */
+for (const file of Object.keys(DOCS)) {
+  if (!exists(file)) {
+    check(`${file} exists`, false, 'the README links to it; it was moved out');
+    // Keep the key present as an empty string so the regex checks below run
+    // and fail, rather than throwing on undefined.
+    DOCS[file] = '';
+  } else {
+    DOCS[file] = read(file);
+    check(`${file} exists`, true);
+  }
+}
+const modelDoc = DOCS['docs/model.md'];
+const perfDoc = DOCS['docs/performance.md'];
+const testingDoc = DOCS['docs/testing.md'];
+const archDoc = DOCS['docs/architecture.md'];
+
+// The README must link to each of them, or the content is unreachable.
+for (const file of [
+  'docs/model.md',
+  'docs/performance.md',
+  'docs/testing.md',
+  'docs/architecture.md',
+]) {
+  check(`README links to ${file}`, readme.includes(`(${file})`));
+}
+
+/* ---- the suite runner ----
+ *
+ * There used to be a check that the README's hard-coded test count matched the
+ * number of `test(` calls in test/. It was correct, and it fired on every
+ * commit that added or removed a test - including commits that had nothing to
+ * do with the README. The count is now stated nowhere in the docs, so there is
+ * nothing to keep in sync; what is still worth checking is that the project
+ * keeps using the built-in runner and not a framework.
+ */
+
+// Scoped to the two places a suite size would be stated, and it has to be a
+// claim about the suite rather than a number in passing prose. A blanket
+// search for "N tests" also matches the bug history - "15 of 28 tests fail"
+// describes a past run of an earlier suite, and failing on that would be
+// wrong. So: a number that is not part of "N of M", and not adjacent to
+// words like "fail" or "passed".
+const testingSection =
+  (readme.match(/^## Testing\b[\s\S]*?(?=^## )/m) || [])[0] || '';
+// Every `sh` block, not just the first: the first one is the clone
+// instructions, and the npm command block is a different one further down.
+const shBlocks = [...readme.matchAll(/^```sh[\s\S]*?^```/gm)].map((m) => m[0]);
+const countIsAClaim = (s) =>
+  [...s.matchAll(/^.*?\b\d+\s+tests?\b.*$/gm)].some(
+    (line) =>
+      !/\d+\s+of\s+\d+\s+tests?\b/.test(line) &&
+      !/\b(fail|failed|pass|passed|broke|broken|green|red)\b/i.test(line)
+  );
+check(
+  'README does not hard-code a test count',
+  !countIsAClaim(testingSection) &&
+    shBlocks.every((block) => !countIsAClaim(block)),
+  'a number here goes stale on every commit that adds a test'
 );
 check(
-  `test count (${testCount} in test/, README says ${claimedTests})`,
-  claimedTests === testCount,
-  'run `npm test` for the authoritative count'
+  'the suite is described as running on node:test',
+  /node:test/.test(readme) || /node:test/.test(testingDoc),
+  'say how the suite is run, in the README summary or docs/testing.md'
 );
-
-/* ---- the test count really is what npm test reports ---- */
+check(
+  'docs/testing.md describes the suite',
+  /node:test/.test(testingDoc),
+  'the moved testing document must say how the suite runs'
+);
 check('README does not claim a framework', !/jest|mocha|vitest/i.test(readme));
+
+/* ---- bug history belongs in the changelog ----
+ *
+ * The docs used to carry retrospectives - "an earlier version set it to zero",
+ * "made 15 of 28 tests fail". They are good writing and they belong in one
+ * place: CHANGELOG.md, where the reader goes looking for them. Left in the
+ * reference docs they read as caveats about the current behaviour rather than
+ * as history, and they duplicate what the changelog already says.
+ */
+check(
+  'CHANGELOG.md exists',
+  exists('CHANGELOG.md'),
+  'the bug history has to live somewhere'
+);
+if (exists('CHANGELOG.md')) {
+  const changelog = read('CHANGELOG.md');
+  check(
+    'CHANGELOG has a 1.1.0 entry',
+    /^##\s+\[?1\.1\.0\]?/m.test(changelog),
+    'expected a "## [1.1.0]" heading'
+  );
+  check(
+    'CHANGELOG records the fixed bugs',
+    /###\s+Fixed/.test(changelog),
+    'expected a Fixed section'
+  );
+  // The changelog heading and package.json must name the same release, or the
+  // notes describe a version nobody is on.
+  const newest = (changelog.match(/^##\s+\[?([\d.]+)\]?/m) || [])[1];
+  check(
+    `CHANGELOG's newest entry matches package.json (${pkg.version})`,
+    newest === pkg.version,
+    newest
+      ? `changelog says ${newest}, package.json says ${pkg.version}`
+      : 'no version heading'
+  );
+}
+const RETROSPECTIVES =
+  /earlier version|previous version|the previous (README|version)|used to report|real bug\b|motivated it/i;
+for (const [file, body] of [
+  ['docs/model.md', modelDoc],
+  ['docs/performance.md', perfDoc],
+  ['docs/testing.md', testingDoc],
+]) {
+  const offenders = body.split('\n').filter((l) => RETROSPECTIVES.test(l));
+  check(
+    `${file} carries no bug history`,
+    offenders.length === 0,
+    offenders.length
+      ? `move to CHANGELOG.md: "${offenders[0].trim().slice(0, 60)}"`
+      : ''
+  );
+}
 
 /* ---- runtime dependencies ---- */
 const deps = Object.keys(pkg.dependencies);
@@ -70,10 +193,14 @@ const named = [
   'src/history.js',
   'src/csv.js',
 ];
+// Every server module must be accounted for somewhere in the documentation.
+// The module table lives in docs/architecture.md now, so "documented" spans the
+// front page and the architecture doc rather than the README alone.
+const documented = `${readme}\n${archDoc}`;
 for (const f of named) {
   check(
-    `${f} exists and is named in the README`,
-    exists(f) && readme.includes(f)
+    `${f} exists and is named in the docs`,
+    exists(f) && documented.includes(f)
   );
 }
 
@@ -98,7 +225,8 @@ const registered = [
   ),
 ];
 for (const e of registered) {
-  check(`${e} is documented in the README`, readme.includes(e));
+  // Routes are documented in docs/architecture.md, which holds the API table.
+  check(`${e} is documented in the docs`, archDoc.includes(e));
 }
 
 /* ---- npm scripts the README tells people to run ---- */
@@ -139,13 +267,35 @@ for (const [key, name] of [
   );
 }
 
-/* ---- the hero placeholder actually exists, and is honest about being one ---- */
-check('docs/hero-placeholder.svg exists', exists('docs/hero-placeholder.svg'));
+/* ---- no fabricated demo ----
+ *
+ * There is no hero image. One used to be a grey placeholder block, kept so the
+ * gap was visible rather than silent - but a placeholder still put an image
+ * where a reader expects a recording, and the alt text had to spend a sentence
+ * explaining that what they were looking at was not a demo. A comment saying
+ * no recording exists is more honest and costs no vertical space.
+ *
+ * docs/README-hero.md is kept: it is the note saying how to make a real one.
+ */
 check('docs/README-hero.md exists', exists('docs/README-hero.md'));
 check(
-  'README says the hero is a placeholder, not a demo',
-  /placeholder/i.test(readme) &&
-    /has not been made|not a recording/i.test(readme)
+  'README references docs/README-hero.md',
+  readme.includes('docs/README-hero.md')
+);
+check(
+  'README embeds no demo image',
+  !/<img[^>]+src="[^"]*\.(gif|png|webp|mov|mp4)"/i.test(readme),
+  'no recording has been made; do not imply otherwise'
+);
+check(
+  'README carries no hero placeholder image',
+  !readme.includes('hero-placeholder.svg'),
+  'the placeholder was removed on purpose'
+);
+check(
+  'README says no recording has been made',
+  /no demo gif yet|has not been made/i.test(readme),
+  'state plainly that the demo is absent'
 );
 
 /* ---- the architecture diagram must not contradict the config ---- */
@@ -233,11 +383,69 @@ if (arch) {
     'receiver list does not match RECEIVER_NODES'
   );
 
+  // The full formula, in order. The old check only looked for
+  // "RSSI = Tx - 10n", which matched a formula that had the reference loss in
+  // the wrong place and omitted the wall term entirely.
+  //
+  // Expected: RSSI = Tx - PL(d0) - 10n*log10(d/d0) - walls - fading
+  // Compared against `plain`, where the typographic minus is already ASCII and
+  // the subscript zero / centred dot are normalised below.
+  const formula = (s) =>
+    s
+      .replace(/−/g, '-') // U+2212 minus sign
+      .replace(/₁/g, '1') // subscript one, in log₁₀
+      .replace(/₀/g, '0') // subscript zero, in d₀
+      .replace(/[·*]/g, ' ') // middot and asterisk
+      .replace(/\s+/g, ' ');
+
+  const formulaRe =
+    /RSSI\s*=\s*Tx\s*-\s*PL\(d0\)\s*-\s*10\s*n\s*log10\(d\s*\/\s*d0\)\s*-\s*walls\s*-\s*fading/;
+
+  // Every RSSI expression the diagram states must match, not just one of them.
+  // The formula appears twice - once as the Path Loss block's label and once in
+  // the footer - and a check built on .test() passes when the other copy still
+  // says the right thing. So collect them all and require every match.
+  const statedFormulas = (s) =>
+    [...formula(s).matchAll(/RSSI\s*=\s*[^|]*?(?=RSSI|$)/g)]
+      .map((m) => m[0].trim())
+      .filter((t) => t.length > 8);
+
+  const archFormulas = statedFormulas(plain);
   check(
-    'diagram states the path loss formula',
-    // Matched against `plain`, where the typographic minus is already ASCII.
-    /RSSI\s*=\s*Tx\s*-\s*10n/.test(plain),
-    'expected RSSI = Tx − 10n·log10(d) …'
+    'diagram states at least one RSSI expression',
+    archFormulas.length > 0,
+    'found no "RSSI =" in the diagram'
+  );
+  const badArch = archFormulas.filter((t) => !formulaRe.test(`${t} `));
+  check(
+    `all ${archFormulas.length} diagram RSSI expressions state the full formula`,
+    badArch.length === 0,
+    badArch.length ? `wrong: ${badArch[0].slice(0, 70)}` : ''
+  );
+  check(
+    'Mermaid fallback states the same formula',
+    formulaRe.test(formula(archDoc)),
+    'the fallback must match the diagram'
+  );
+  // There is deliberately no "README states the formula" check. The front
+  // page's model section is a two-line summary that links to docs/model.md;
+  // there is no formula on it to drift. The two places that do state the
+  // expression - docs/model.md and docs/architecture.md - are each checked
+  // against the diagram above.
+  check(
+    'docs/model.md derives the same expression',
+    formulaRe.test(formula(modelDoc)),
+    'the moved model document must match the diagram'
+  );
+  check(
+    'docs/model.md states the log-distance law',
+    /PL\(d\)\s*=\s*PL\(d0\)\s*\+\s*10/.test(formula(modelDoc)),
+    'expected PL(d) = PL(d0) + 10 * n * log10(d / d0)'
+  );
+  check(
+    'formula names the wall term',
+    /-\s*walls\s*-/.test(formula(plain)) || /wallLoss/.test(plain),
+    'walls contribute attenuation and the diagram must say so'
   );
   check(
     'diagram says sources combine in linear power, not dBm',
@@ -275,7 +483,7 @@ const bench = read('scripts/benchmark.js');
 check('benchmark script exists', bench.length > 0);
 
 // Extract the fenced block the README presents as measured output.
-const block = (readme.match(/```\n(Room 20x15 m[\s\S]*?)```/) || [])[1];
+const block = (perfDoc.match(/```\n(Room 20x15 m[\s\S]*?)```/) || [])[1];
 if (!block) {
   check(
     'README quotes a measured performance block',
@@ -383,7 +591,7 @@ if (!block) {
   const { localisationErrors } = require('./localisation-errors');
   const acc = localisationErrors();
 
-  const readmeErr = Number((readme.match(/mean ([\d.]+) m, median/) || [])[1]);
+  const readmeErr = Number((perfDoc.match(/mean ([\d.]+) m, median/) || [])[1]);
   check(
     `mean position error: README ${readmeErr} m vs computed ${acc.mean.toFixed(
       2
@@ -395,7 +603,7 @@ if (!block) {
 
   // The per-band error table must also be reproduced.
   const bandMeans = new Set(acc.bands.map((b) => b.mean.toFixed(2)));
-  for (const m of readme.matchAll(
+  for (const m of perfDoc.matchAll(
     /\|\s*\d+(?:–\d+)?\+?\s*m\s*\|\s*\d+\s*\|\s*([\d.]+) m\s*\|/g
   )) {
     const claimed = m[1];
