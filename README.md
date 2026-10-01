@@ -52,6 +52,8 @@ watch four receivers try to work out where the mobile device is.
   grid
 - **Trilateration** of the mobile transmitter, with the estimate drawn against
   the true position and the error in metres
+- **Localises the mobile transmitter to about 1.8 m near the centre and 5.5 m at
+  the edges** (simulated, 3 dB fading)
 - **RSSI and error time series**, plus movement trails
 - **Export** the map as PNG, or the data as CSV/JSON over HTTP
 

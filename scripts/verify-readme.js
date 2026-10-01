@@ -697,6 +697,51 @@ if (!block) {
       `computed bands: ${[...bandMeans].join(', ')} m`
     );
   }
+
+  /* ---- the front page's headline accuracy figures ----
+   *
+   * The features list claims "about 1.8 m near the centre and 5.5 m at the
+   * edges". Those are the first and last distance bands - errors bucketed by
+   * how far the target was from the middle of the room, which is what
+   * localisation-errors.js computes. "About" means the claim is checked at the
+   * precision it is written to: 1.8 against 1.80 exactly, 5.5 against 5.46
+   * rounded to one decimal. Comparing to full precision would fail on a figure
+   * that is correct as written, and comparing loosely would pass on a wrong one.
+   */
+  const centre = acc.bands[0];
+  const edge = acc.bands[acc.bands.length - 1];
+  // Matched against a whitespace-flattened copy: Prettier wraps this bullet
+  // between "at" and "the edges", and a pattern spanning that break never
+  // matches however correct the text is.
+  const flat = readme.replace(/\s+/g, ' ');
+  const claim = (() => {
+    const m = flat.match(
+      /Localises the mobile transmitter to about ([\d.]+) m near the centre and ([\d.]+) m at the edges/i
+    );
+    return m ? { centre: Number(m[1]), edge: Number(m[2]) } : null;
+  })();
+  check(
+    'README states the centre and edge accuracy figures',
+    claim !== null,
+    'expected "about X m near the centre and Y m at the edges"'
+  );
+  if (claim) {
+    check(
+      `centre figure: README ${claim.centre} m vs computed ${centre.mean.toFixed(1)} m`,
+      Math.abs(claim.centre - centre.mean) < 0.05,
+      `computed ${centre.mean.toFixed(2)} m over ${centre.n} samples 0-${centre.hi} m from the centre`
+    );
+    check(
+      `edge figure: README ${claim.edge} m vs computed ${edge.mean.toFixed(1)} m`,
+      Math.abs(claim.edge - edge.mean) < 0.05,
+      `computed ${edge.mean.toFixed(2)} m over ${edge.n} samples ${edge.lo}-${edge.hi} m from the centre`
+    );
+    check(
+      'the accuracy claim names its conditions',
+      /simulated/i.test(flat) && /3\s*dB fading/i.test(flat),
+      'say it is simulated and name the fading'
+    );
+  }
 }
 
 /* ---- the supported Node range must agree everywhere it is stated ----
