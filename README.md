@@ -180,7 +180,7 @@ Roughly in the order I expect to do them.
       compare a later walk against it
 - [ ] **Faster grid** — spatial partitioning so resolution can go well past 1 m
       without the frame budget moving
-- [ ] **Recorded demo GIF** — replacing the placeholder at the top
+- [ ] **Recorded demo GIF** — an actual capture of the app, none exists yet
 - [ ] **A real accuracy metric** for when there is no simulated truth
 
 ## Changelog
