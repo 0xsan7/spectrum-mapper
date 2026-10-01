@@ -1,0 +1,25 @@
+# Render blueprint for a free Docker web service.
+#
+# One click from a fork: New > Blueprint, point it at this repository, apply.
+# No live-demo URL appears anywhere in this repository on purpose - where the
+# thing is deployed is not this file's business, and a stale link in a README is
+# worse than no link.
+
+services:
+  - type: web
+    name: spectrum-mapper-demo
+    runtime: docker
+    plan: free
+    # The room is shared, so demo mode is not optional here. HOST has to be
+    # 0.0.0.0 or the container listens on loopback inside itself and nothing can
+    # reach it - the local default is 127.0.0.1 precisely because a public copy
+    # is the exception.
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: DEMO_MODE
+        value: '1'
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: '3000'

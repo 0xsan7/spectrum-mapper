@@ -64,6 +64,7 @@ physics locally, so two browsers open at once cannot disagree.
 ### API
 
 ```
+GET  /healthz                      liveness, independent of the sim loop
 GET  /api/summary                 rolling aggregates over the buffer
 GET  /api/export/timeseries.csv   one row per sample
 GET  /api/export/heatmap.csv      one row per grid cell

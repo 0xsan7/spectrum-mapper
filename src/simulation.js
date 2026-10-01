@@ -48,6 +48,24 @@ class RFSimulation {
     return true;
   }
 
+  /**
+   * Put every source back at the position it started from and unpin it.
+   *
+   * Clearing `pinned` alone is not enough. A pinned source stopped moving, so
+   * dropping the pin makes it wander off from wherever the visitor dropped it -
+   * the next visitor then opens a room that is not the one the app documents.
+   */
+  reset() {
+    this.sources.forEach((source, i) => {
+      const original = RF_SOURCES[i];
+      source.x = original.x;
+      source.y = original.y;
+      source.vx = original.vx;
+      source.vy = original.vy;
+    });
+    this.pinned.clear();
+  }
+
   /** Let a source resume its original velocity. */
   releaseSource(id) {
     return this.pinned.delete(id);

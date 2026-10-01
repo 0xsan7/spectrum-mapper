@@ -5,6 +5,8 @@
  *   node scripts/verify-readme.js
  */
 const fs = require('fs');
+const { execFileSync } = require('child_process');
+const YAML = require('yaml');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -162,6 +164,7 @@ const DOCS_TABLE = [
   ['Performance', 'docs/performance.md'],
   ['Testing', 'docs/testing.md'],
   ['Real data', 'docs/real-data.md'],
+  ['Deploy', 'docs/deploy.md'],
   ['File tree', 'docs/tree.md'],
   ['Changelog', 'CHANGELOG.md'],
 ];
@@ -292,6 +295,241 @@ const endpoints = [
 ];
 for (const e of endpoints) {
   check(`${e} route registered`, serverSrc.includes(e));
+}
+
+/*
+ * Every key in CONFIG is a knob somebody will read about. Adding a knob and
+ * forgetting to document it is the usual way this docs rot, and nothing else in
+ * the suite notices: the value simply works, undocumented.
+ *
+ * Both surfaces are checked because they drift independently - the README table
+ * is for readers, .env.example is what gets copied into a real .env.
+ */
+{
+  const constants = read('src/config/constants.js');
+  const keys = [
+    ...new Set(
+      [...constants.matchAll(/^\s{2}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1])
+    ),
+  ].sort();
+
+  const envExample = read('.env.example');
+  // The docs count as coverage for a key, since a few of them are only
+  // meaningful with prose rather than a table row.
+  // The tracked-file list comes from git rather than a glob, so an untracked
+  // doc cannot quietly satisfy the check.
+  const docs = execFileSync('git', ['ls-files', 'docs/*.md'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean)
+    .map((f) => read(f))
+    .join('\n');
+  const prose = `${readme}${docs}`;
+
+  const missingEverywhere = keys.filter((k) => !prose.includes(k));
+  check(
+    `every CONFIG key is documented somewhere (${keys.length} keys)`,
+    missingEverywhere.length === 0,
+    `undocumented: ${missingEverywhere.join(', ')}`
+  );
+
+  // .env.example is stricter on purpose: it is what gets copied into a real
+  // .env, so prose in the README is not a substitute for the key being there.
+  // Reading it the other way - "documented anywhere counts" - let
+  // DEMO_MAX_CLIENTS be dropped from .env.example while the README table still
+  // mentioned it, which is exactly the drift this is meant to catch.
+  // Assigned, not merely named: the demo-mode prose in .env.example lists its
+  // variables in a comment, so an "includes the name" check passed even after
+  // the assignment line was deleted.
+  const assigned = new Set(
+    [...envExample.matchAll(/^([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1])
+  );
+  const missingFromEnv = keys.filter((k) => !assigned.has(k));
+  check(
+    `every CONFIG key is in .env.example (${keys.length} keys)`,
+    missingFromEnv.length === 0,
+    `missing from .env.example: ${missingFromEnv.join(', ')}`
+  );
+}
+
+/*
+ * docs/deploy.md, checked for the things that are easy to state wrongly.
+ *
+ * A deploy page is read once, by someone about to spend an afternoon on it. The
+ * numbers come from the platform's documentation and drift, so the shape of the
+ * claim is checked here rather than trusted.
+ */
+{
+  check('docs/deploy.md exists', exists('docs/deploy.md'));
+
+  if (exists('docs/deploy.md')) {
+    const deploy = read('docs/deploy.md');
+
+    // It has to describe deploying, not merely exist.
+    check(
+      'docs/deploy.md describes the blueprint steps',
+      /New → Blueprint/.test(deploy) && /fork/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md explains why HOST must be 0.0.0.0',
+      /0\.0\.0\.0/.test(deploy) && /loopback/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md says what happens when the free tier sleeps',
+      /spin(?:s|ning)? down|sleeping/i.test(deploy) &&
+        /15 minutes/i.test(deploy)
+    );
+    // Both halves, not either: "cold start" alone could sit in a sentence that
+    // never says how long it takes, which is the part a visitor feels.
+    check(
+      'docs/deploy.md names the cold start and how long it takes',
+      /cold start/i.test(deploy) && /(about|roughly) a minute/i.test(deploy)
+    );
+    check(
+      'docs/deploy.md cites Render for the spin-down behaviour',
+      /render\.com\/docs\/free/.test(deploy)
+    );
+    // Require the warning rather than negating a list of phrasings. Negating
+    // specific wording only catches those wordings: replacing Render's
+    // "do not use free instances for production" with "free instances are
+    // production ready" sailed past a check that only looked for "free
+    // instances are production".
+    check(
+      'docs/deploy.md warns that the free plan is not for production',
+      /not to use free\s+instances for production|free instances are not for production|do not use free instances/i.test(
+        deploy.replace(/\s+/g, ' ')
+      )
+    );
+
+    // The instruction was no live-demo URL anywhere. This repository documents
+    // how to deploy your own copy and points at nobody else's.
+    const allowedHosts =
+      /^(www\.|dashboard\.)?(render\.com|localhost|127\.0\.0\.1|github\.com|docs\.github\.com|your-service)$/;
+    const hostnames = [
+      ...new Set(
+        [...deploy.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) =>
+          m[1].toLowerCase()
+        )
+      ),
+    ].filter((h) => !allowedHosts.test(h));
+    check(
+      'docs/deploy.md links nowhere but Render and the repository',
+      hostnames.length === 0,
+      `unexpected hosts: ${hostnames.join(', ')}`
+    );
+
+    // The blueprint values it documents must be the ones in the blueprint, or
+    // the page is describing a deploy that does not happen.
+    const blueprint = read('render.yaml');
+    check(
+      'render.yaml is still there to deploy',
+      blueprint.includes('services:')
+    );
+    check(
+      'docs/deploy.md states DEMO_MODE=1, as render.yaml sets it',
+      deploy.includes('DEMO_MODE=1') && /value: '1'/.test(blueprint)
+    );
+    check(
+      'docs/deploy.md states HOST=0.0.0.0, as render.yaml sets it',
+      deploy.includes('HOST=0.0.0.0') && blueprint.includes('value: 0.0.0.0')
+    );
+    check(
+      'docs/deploy.md names the health check the blueprint uses',
+      deploy.includes('/healthz') &&
+        blueprint.includes('healthCheckPath: /healthz')
+    );
+  }
+}
+
+/*
+ * render.yaml, checked rather than trusted.
+ *
+ * A blueprint is configuration: it can be wrong and nothing fails until
+ * somebody deploys it, which is exactly when it is expensive. These are the
+ * three values a public demo cannot work without, and a blueprint that has
+ * silently lost one of them should fail here rather than in someone's browser.
+ */
+{
+  check('render.yaml exists', exists('render.yaml'));
+
+  if (exists('render.yaml')) {
+    const blueprint = read('render.yaml');
+    // YAML parse, not just a grep: a blueprint that is valid-looking but does
+    // not parse is the failure mode worth catching.
+    let parsed = null;
+    try {
+      parsed = YAML.parse(blueprint);
+    } catch (err) {
+      check('render.yaml parses as YAML', false, err.message);
+    }
+    if (parsed) {
+      check('render.yaml parses as YAML', true);
+
+      const svc = (parsed.services || [])[0] || {};
+      check(
+        'render.yaml declares one web service',
+        (parsed.services || []).length === 1
+      );
+      check(
+        'render.yaml builds from Docker',
+        svc.type === 'web' && svc.runtime === 'docker'
+      );
+      check('render.yaml uses the free plan', svc.plan === 'free');
+      // Render would default this to ./Dockerfile, so a wrong or missing path
+      // is a build failure on deploy rather than a lint failure here.
+      check(
+        'render.yaml points at the Dockerfile',
+        svc.dockerfilePath === './Dockerfile',
+        `got ${JSON.stringify(svc.dockerfilePath)}`
+      );
+      check(
+        'the path render.yaml names is a file in the repository',
+        exists(String(svc.dockerfilePath || '').replace(/^\.\//, ''))
+      );
+      check(
+        'render.yaml health-checks /healthz',
+        svc.healthCheckPath === '/healthz',
+        `got ${svc.healthCheckPath}`
+      );
+
+      // The values, not just the keys. Quoting matters: `value: 1` parses as the
+      // number 1, and DEMO_MODE is compared against the string '1'.
+      const vars = Object.fromEntries(
+        (svc.envVars || []).map((v) => [v.key, v.value])
+      );
+      check(
+        'render.yaml sets DEMO_MODE=1',
+        vars.DEMO_MODE === '1',
+        `got ${JSON.stringify(vars.DEMO_MODE)}`
+      );
+      check(
+        'render.yaml sets HOST=0.0.0.0',
+        vars.HOST === '0.0.0.0',
+        `got ${JSON.stringify(vars.HOST)}`
+      );
+
+      // Cross-checked against the server, so a rename on either side is caught.
+      const constants = read('src/config/constants.js');
+      // DEMO_MODE is compared against the string '1' rather than parsed as a
+      // number, so 'true' does not silently enable it. Match that shape.
+      check(
+        'DEMO_MODE is the name src/config/constants.js reads',
+        /process\.env\.DEMO_MODE === '1'/.test(constants),
+        "expected DEMO_MODE: process.env.DEMO_MODE === '1'"
+      );
+      check(
+        'HOST is the name src/config/constants.js reads',
+        constants.includes('process.env.HOST')
+      );
+      const serverSrc = read('src/server.js');
+      check(
+        '/healthz is the route the server actually serves',
+        /app\.get\(\s*['"]\/healthz['"]/.test(serverSrc)
+      );
+    }
+  }
 }
 
 // The reverse direction: a route that exists but is undocumented is the more

@@ -21,6 +21,22 @@ const CONFIG = {
   // local deployment has no reason to set one; a public one does, because
   // without it anyone can overwrite the measured map.
   READINGS_TOKEN: process.env.READINGS_TOKEN || '',
+
+  // Public demo hardening. Off by default, so a local install behaves exactly as
+  // before and nothing here changes the single-user case.
+  DEMO_MODE: process.env.DEMO_MODE === '1',
+  // Commands per second, per client, in demo mode.
+  DEMO_RATE_LIMIT: numEnv('DEMO_RATE_LIMIT', 20),
+  DEMO_MAX_CLIENTS: numEnv('DEMO_MAX_CLIENTS', 50),
+  // Empty means no Origin check. Set it to a comma-separated allowlist in front
+  // of a hosted copy so a page on another site cannot drive the socket.
+  ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
+  // Reset the room after this long with no commands, so the next visitor gets
+  // the defaults rather than whatever the last one left behind.
+  DEMO_IDLE_RESET_MS: numEnv('DEMO_IDLE_RESET_MS', 10 * 60 * 1000),
 };
 
 const RF_SOURCES = [

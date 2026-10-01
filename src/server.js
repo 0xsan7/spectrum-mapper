@@ -17,7 +17,16 @@ const { CONFIG } = require('./config/constants');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+/**
+ * noServer, so this module owns the upgrade.
+ *
+ * WebSocket.Server({ server }) installs its own 'upgrade' listener in its
+ * constructor. Adding another listener does not replace it: both run, ws calls
+ * handleUpgrade regardless, and the handshake completes with 101 even after this
+ * code destroys the socket. A refused Origin has to be caught before ws sees the
+ * request at all, which is what noServer is for.
+ */
+const wss = new WebSocket.Server({ noServer: true });
 
 // Resolve against this file so `npm start` works from any working directory.
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -277,6 +286,9 @@ function updateSimulation(full = false) {
     bounds: { min: CONFIG.MIN_RSSI, max: CONFIG.MAX_RSSI },
     roomWidth: CONFIG.ROOM_WIDTH,
     roomHeight: CONFIG.ROOM_HEIGHT,
+    // The UI shows a banner from this. Sent on every frame so a browser that
+    // reconnects to a demo gets it without a second round trip.
+    demo: CONFIG.DEMO_MODE,
     // null until something has been ingested. The browser checks for null
     // rather than for an empty array: "no measurements yet" and "measurements
     // that cover none of this room" are different states.
@@ -321,6 +333,88 @@ function broadcast() {
     }
   });
   return data;
+}
+
+/* ---- public demo hardening ---- */
+
+/**
+ * Per-client command rate limiting.
+ *
+ * A Map keyed by client id rather than by socket object: it is inspectable, it
+ * can be pruned, and it survives a reconnect without being a leak. Entries are
+ * dropped once they fall back under the limit, so an idle demo does not grow
+ * this forever.
+ */
+const rateBuckets = new Map();
+
+/** True when `id` is allowed another command right now. */
+function rateLimitOk(id, now = Date.now()) {
+  if (!CONFIG.DEMO_MODE) return true;
+
+  const bucket = rateBuckets.get(id);
+  if (!bucket) {
+    rateBuckets.set(id, { count: 1, windowStart: now });
+    return true;
+  }
+  // A fixed window, reset once it elapses. Deliberately simple: at 20/s against
+  // a single visitor dragging a slider this is not the interesting control,
+  // and anything cleverer is harder to reason about than it is worth.
+  if (now - bucket.windowStart >= 1000) {
+    bucket.count = 1;
+    bucket.windowStart = now;
+    return true;
+  }
+  if (bucket.count >= CONFIG.DEMO_RATE_LIMIT) return false;
+  bucket.count++;
+  return true;
+}
+
+function forgetClientRate(id) {
+  rateBuckets.delete(id);
+}
+
+/**
+ * Origin check for the WebSocket upgrade.
+ *
+ * Browsers send Origin on a WebSocket handshake but nothing else stops a script
+ * from connecting directly, so this is a control on drive-by pages rather than
+ * an authentication mechanism. It matters because a public demo lets anyone who
+ * reaches it move every transmitter - a hostile page could script that against
+ * someone else's copy.
+ */
+function originAllowed(req) {
+  if (!CONFIG.DEMO_MODE || CONFIG.ALLOWED_ORIGINS.length === 0) return true;
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  return CONFIG.ALLOWED_ORIGINS.includes(origin);
+}
+
+/** When the last command arrived, and the reset timer that follows it. */
+const demoIdle = { last: Date.now(), timer: null };
+
+function noteDemoActivity() {
+  demoIdle.last = Date.now();
+  if (demoIdle.timer) {
+    clearTimeout(demoIdle.timer);
+    demoIdle.timer = null;
+  }
+  demoIdle.timer = setTimeout(() => {
+    demoIdle.timer = null;
+    resetScene();
+  }, CONFIG.DEMO_IDLE_RESET_MS);
+  // Do not hold the process open for an idle timer.
+  if (demoIdle.timer.unref) demoIdle.timer.unref();
+}
+
+/** Put the room back the way it started. */
+function resetScene() {
+  simulation.reset();
+  receivers.reset();
+  obstacles.clear();
+  params.exponent = 2.7;
+  params.frequency = 2437;
+  params.noise = 3;
+  params.paused = 0;
 }
 
 /**
@@ -381,12 +475,7 @@ function handleCommand(msg) {
     }
 
     case 'reset':
-      simulation.pinned.clear();
-      receivers.reset();
-      obstacles.clear();
-      params.exponent = 2.7;
-      params.frequency = 2437;
-      params.noise = 3;
+      resetScene();
       return null;
 
     case 'clearReadings':
@@ -407,7 +496,48 @@ function handleCommand(msg) {
   }
 }
 
-wss.on('connection', (ws) => {
+/**
+ * Upgrade guard, run *before* the handshake completes.
+ *
+ * Checking inside 'connection' looks equivalent and is not: the HTTP upgrade has
+ * already returned 101 by then, so the client sees a successful socket open and
+ * only then a close. A rejected origin should never get a completed handshake at
+ * all. Destroying the socket here makes it an outright failed connection.
+ *
+ * Origin first, then the cap. Refusing over the cap means a demo that is full
+ * does not also spend a socket on a visitor who will be disconnected anyway.
+ */
+// On the http server, not on wss. With noServer: true the WebSocketServer emits
+// no 'upgrade' of its own, and a listener attached to wss simply never fires -
+// the upgrade then falls through to express, which answers 200 and the client
+// sees a successful-looking HTTP response with no socket in it.
+server.on('upgrade', (req, socket, head) => {
+  if (!originAllowed(req)) {
+    socket.write(
+      'HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'
+    );
+    socket.destroy();
+    return;
+  }
+
+  if (CONFIG.DEMO_MODE && wss.clients.size >= CONFIG.DEMO_MAX_CLIENTS) {
+    // 503 rather than 101-then-close: the platform's own health checks and any
+    // client library see a refusal instead of a flapping connection.
+    socket.write(
+      'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 30\r\nContent-Length: 0\r\n\r\n'
+    );
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit('connection', ws, req);
+  });
+});
+
+wss.on('connection', (ws, req) => {
+  ws.clientId = `${req.socket.remoteAddress || 'unknown'}:${Date.now()}:${Math.random()}`;
+
   if (simulationData) {
     // `full: true` gives a new client the complete history and trails once, so
     // its chart and trails are populated immediately instead of filling in from
@@ -429,6 +559,20 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // Only real commands count against the limit and the idle timer. A ping or
+    // a malformed message should not be able to keep a room from ever resetting,
+    // and should not cost a visitor their budget either.
+    if (!rateLimitOk(ws.clientId)) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: `slow down: ${CONFIG.DEMO_RATE_LIMIT} commands per second`,
+        })
+      );
+      return;
+    }
+    noteDemoActivity();
+
     const error = handleCommand(msg);
     if (error) {
       ws.send(JSON.stringify({ type: 'error', message: error }));
@@ -439,6 +583,10 @@ wss.on('connection', (ws) => {
     // waiting out the rest of the update interval.
     const data = updateSimulation();
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+  });
+
+  ws.on('close', () => {
+    if (ws.clientId) forgetClientRate(ws.clientId);
   });
 });
 
@@ -528,6 +676,7 @@ app.get('/api/export/frame.json', (req, res) => {
     // along. Without it a scripted consumer of frame.json could see the model
     // grid and no way to tell it apart from real measurements.
     measured: frame.measured,
+    demo: frame.demo,
     history: history.series(),
     summary: history.summary(),
   });
@@ -540,6 +689,13 @@ app.get('/api/export/frame.json', (req, res) => {
  * token costs nothing.
  */
 function readingsTokenGuard(req, res, next) {
+  // Demo mode first, and with no token in the message: a public copy is not
+  // collecting readings, and saying "unauthorised" would suggest a token would
+  // help. 403 rather than 404 - the route exists, it is simply closed.
+  if (CONFIG.DEMO_MODE) {
+    res.status(403).json({ error: 'ingest is disabled in demo mode' });
+    return;
+  }
   if (readingsTokenOk(req)) {
     next();
     return;
@@ -635,6 +791,24 @@ app.post(
   }
 );
 
+/**
+ * Liveness for a platform health check.
+ *
+ * Deliberately not behind requireFrame: this has to answer before the first
+ * broadcast, or a platform waiting on it concludes the container is broken.
+ * It reports the room and whether readings exist, which is enough to tell a
+ * working instance from a half-started one, and nothing that leaks the model.
+ */
+app.get('/healthz', (req, res) => {
+  res.json({
+    status: 'ok',
+    demo: CONFIG.DEMO_MODE,
+    uptimeSeconds: Math.round(process.uptime()),
+    room: { width: CONFIG.ROOM_WIDTH, height: CONFIG.ROOM_HEIGHT },
+    readings: readings.size,
+  });
+});
+
 app.get('/api/summary', (req, res) => {
   const frame = requireFrame(res);
   if (!frame) return;
@@ -668,6 +842,8 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 module.exports = {
+  CONFIG,
+
   app,
   server,
   start,
@@ -678,6 +854,13 @@ module.exports = {
   readings,
   params,
   handleCommand,
+  // Exported for the demo-mode tests: the rate limiter and the reset are the
+  // things worth testing directly, and driving them through a real socket would
+  // make those tests slow and timing-dependent.
+  rateLimitOk,
+  resetScene,
+  forgetClientRate,
+  rateBuckets,
   updateSimulation,
   locateTrackedSource,
   PathLossModel,

@@ -23,6 +23,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── README-hero.md         # how to record the real hero GIF
 │   ├── architecture.md
 │   ├── architecture.svg       # architecture diagram
+│   ├── deploy.md
 │   ├── examples/
 │   │   └── sample-readings.csv
 │   ├── model.md               # path-loss model, in full
@@ -52,6 +53,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── spectrum-analysis.js   # coverage statistics
 │   ├── style.css              # all styling
 │   └── websocket.js           # connection and reconnect state
+├── render.yaml
 ├── 🔧 scripts/
 │   ├── benchmark.js           # produces the performance numbers
 │   ├── gen-tree.js            # regenerates this tree
@@ -76,6 +78,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   └── trilateration.js       # RSSI → range → position
 └── 🧪 test/
     ├── browser.test.js        # browser logic loaded into a VM
+    ├── demo-mode.test.js
     ├── diagrams.test.js
     ├── fixtures/
     │   └── malformed.svg
