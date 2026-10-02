@@ -7,6 +7,7 @@
  *   W      toggle wall-drawing mode
  *   C      clear all walls
  *   M      cycle the map: model / measured
+ *   K      cycle the colour ramp: inferno / cividis / classic
  */
 class KeyboardShortcuts {
   static init() {
@@ -46,6 +47,12 @@ class KeyboardShortcuts {
           dashboard.interaction.setMode('move');
           dashboard.cycleMapMode();
           dashboard.setStatusHint();
+          break;
+        case 'k':
+          // The colour ramp, not R: R is already reset, and a shortcut that
+          // does something destructive is a bad neighbour to one that only
+          // changes how the map looks.
+          dashboard.cycleRamp();
           break;
         case 'c':
           dashboard.send({ type: 'clearWalls' });

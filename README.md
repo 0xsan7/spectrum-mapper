@@ -53,7 +53,15 @@ driven by a real log-distance path loss model rather than a decorative
 gradient. Move the transmitters, draw walls, turn the propagation knobs, and
 watch four receivers try to work out where the mobile device is.
 
-- **Coverage heatmap** over a 1 m grid, with a dBm legend and a hover readout
+- **Coverage heatmap** over a 1 m grid, bilinearly interpolated so the field is
+  smooth rather than tiled, with contour lines at **-50, -70 and -85 dBm** and a
+  hover readout
+- **Three colour ramps**, cycled with `K`: **inferno** by default, a
+  perceptually uniform ramp whose lightness rises evenly with signal strength;
+  **cividis**, built for colour-blind readers and still monotonic in lightness
+  when red and green are collapsed; and the old blue-to-red **classic** ramp, kept
+  for anyone who reads it faster. Colours interpolate in Oklab, and the legend
+  bar is generated from the same ramp as the map, so the two cannot disagree
 - **Drag and drop** for transmitters and receivers; double-click a transmitter
   to release it back into motion
 - **Live model controls** — path loss exponent, carrier frequency, fading
@@ -112,6 +120,7 @@ docker run --rm -p 3000:3000 spectrum-mapper
 | Pause / resume                 | `Space` or the Pause button     |
 | Reset everything               | `R`                             |
 | Cycle map mode                 | `M`                             |
+| Cycle colour ramp              | `K`                             |
 
 ### Configuration
 

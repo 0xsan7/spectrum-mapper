@@ -7,22 +7,58 @@
  * cannot disagree with the map.
  */
 class LegendBar {
-  constructor(barEl, labelsEl) {
+  /**
+   * @param {Element} barEl the gradient
+   * @param {Element} labelsEl the min/mid/max row
+   * @param {Element} [ticksEl] container for the contour level ticks
+   */
+  constructor(barEl, labelsEl, ticksEl = null) {
     this.bar = barEl;
     this.labels = labelsEl;
+    this.ticks = ticksEl;
   }
 
-  render(minRssi, maxRssi) {
-    const steps = 40;
-    const parts = [];
-    for (let i = 0; i < steps; i++) {
-      const t = i / (steps - 1);
-      const rssi = minRssi + t * (maxRssi - minRssi);
-      parts.push(
-        `${ColorMapper.toCss(ColorMapper.getColor(rssi, minRssi, maxRssi))} ${(t * 100).toFixed(1)}%`
-      );
+  /**
+   * Mark where the contour levels fall on the bar.
+   *
+   * Positioned by the same normalisation the colour uses, so a tick at -70 sits
+   * on the -70 colour. Out-of-range levels are dropped rather than clamped: a
+   * tick pinned to the end of the bar would claim there is a contour at -20.
+   */
+  renderTicks(minRssi, maxRssi, levels) {
+    if (!this.ticks) return 0;
+    this.ticks.innerHTML = '';
+    const span = maxRssi - minRssi;
+    if (span <= 0) return 0;
+    let placed = 0;
+    for (const level of levels) {
+      const t = (level - minRssi) / span;
+      if (t < 0 || t > 1) continue;
+      const tick = document.createElement('i');
+      tick.style.left = `${(t * 100).toFixed(2)}%`;
+      tick.dataset.level = String(level);
+      this.ticks.appendChild(tick);
+      placed++;
     }
-    this.bar.style.background = `linear-gradient(to right, ${parts.join(', ')})`;
+    return placed;
+  }
+
+  /**
+   * @param {number} minRssi
+   * @param {number} maxRssi
+   * @param {string} [ramp] the ramp the canvas is painting. The bar is built
+   *   from the same ColorMapper call the heatmap makes, so it cannot disagree
+   *   with the map - which is the whole point of generating it here rather
+   *   than writing a CSS gradient by hand.
+   */
+  render(minRssi, maxRssi, ramp = ColorMapper.DEFAULT_RAMP) {
+    this.bar.style.background = ColorMapper.toGradient(
+      ramp,
+      minRssi,
+      maxRssi,
+      40
+    );
+    this.ramp = ramp;
 
     // Label the ends and the midpoint of the real range.
     const mid = Math.round((minRssi + maxRssi) / 2);
@@ -34,7 +70,10 @@ class LegendBar {
     });
 
     // A tick at the hotspot threshold, so the coverage number has a visible
-    // anchor on the scale.
-    this.bar.title = `Hotspot threshold: ${minRssi + (maxRssi - minRssi) * 0.75} dBm`;
+    // anchor on the scale. The title also names the ramp, because the contour
+    // lines are pinned to fixed dBm and only make sense against a scale you
+    // can read.
+    const name = (ColorMapper.RAMPS[ramp] || {}).label || ramp;
+    this.bar.title = `Hotspot threshold: ${minRssi + (maxRssi - minRssi) * 0.75} dBm. Ramp: ${name}`;
   }
 }

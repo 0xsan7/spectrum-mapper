@@ -59,6 +59,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── benchmark.js           # produces the performance numbers
 │   ├── gen-tree.js            # regenerates this tree
 │   ├── localisation-errors.js
+│   ├── mutation-phase2.js
 │   ├── svg-xml.js
 │   ├── verify-diagrams.js     # validates the SVG assets
 │   └── verify-readme.js       # fails when docs drift from code
@@ -79,6 +80,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   └── trilateration.js       # RSSI → range → position
 └── 🧪 test/
     ├── browser.test.js        # browser logic loaded into a VM
+    ├── colormap.test.js
     ├── demo-mode.test.js
     ├── diagrams.test.js
     ├── fixtures/
@@ -87,6 +89,7 @@ cannot drift. Regenerate with `npm run tree`.
     ├── history.test.js        # buffer, deltas, CSV quoting
     ├── host-default.test.js
     ├── interpolate.test.js
+    ├── lattice-index.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
     ├── readings-route.test.js

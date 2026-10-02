@@ -38,6 +38,11 @@
   --text-dim: #c3d3e2;
   --text-muted: #8ba3b8;
 
+  /* The dark edge a two-tone mark carries on a light field. Shared by the
+     contour line and the legend's level ticks; kept as a token so the two
+     cannot drift, and because a verifier recomputes contrast against it. */
+  --casing-ink: #080b10;
+
   /* Signal, estimate, tracked. */
   --accent: #00e5ff;
   --accent-dim: #52768f;
@@ -407,10 +412,81 @@ main {
   flex-shrink: 0;
 }
 
+/* The bar and its tick rail share a wrapper so a tick can be positioned
+   against the bar's own width rather than the legend's. */
+.legend-scale {
+  position: relative;
+}
+
 .legend-bar {
   height: 10px;
   border-radius: var(--radius-sm);
   border: var(--border-w) solid var(--border-strong);
+}
+
+/* Contour levels, marked on the bar.
+ *
+ * A tick is two-tone for the same reason the contour line is: --accent alone
+ * only works where the ramp is dark. Measured against the ramp colour each tick
+ * sits on:
+ *
+ *            -85      -70      -50
+ *   inferno  9.64:1   5.48:1   2.35:1     <- accent reads on the dark end
+ *   cividis  6.78:1   4.13:1   2.19:1
+ *   classic  1.42:1   1.30:1   1.41:1     <- accent is invisible throughout
+ *
+ * classic's pale stretch is its middle, which is exactly where two of the three
+ * ticks land, so every tick fell under the 3:1 non-text minimum. The dark
+ * casing below inverts that: 9.00 / 16.62 / 9.08 on classic, and it leaves the
+ * ticks readable on the dark ends too, where the accent is what carries them.
+ */
+.legend-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.legend-ticks i {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  /* 2px of accent between two dark edges, so the tick has a visible boundary
+     on a light field and a visible core on a dark one. */
+  width: 4px;
+  margin-left: -2px;
+  background: var(--accent);
+  border-left: 1px solid var(--casing-ink);
+  border-right: 1px solid var(--casing-ink);
+  box-sizing: border-box;
+  opacity: 0.95;
+}
+
+/* The ramp toggle reads as a button, so it needs button affordances. */
+.ramp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ramp-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ramp-toggle i {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0.5rem;
+  border-radius: 1px;
+  border: var(--border-w) solid var(--border-strong);
+  flex: none;
 }
 
 .legend-labels {

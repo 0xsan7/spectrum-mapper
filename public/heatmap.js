@@ -1,3 +1,105 @@
+/**
+ * Marching squares over an RSSI grid.
+ *
+ * Returns short line segments in *grid* coordinates, not pixels, so the caller
+ * scales them with its own cell size. The grid is a regular lattice indexed
+ * column-major: index = x * rows + y, which is the order src/heatmap.js emits.
+ *
+ * A cell with no measurement is `rssi: null`. It is skipped rather than read as
+ * zero, because zero dBm is a very strong signal and drawing a contour through
+ * a hole would claim there was one.
+ *
+ * A value exactly equal to `level` counts as *not above*, so a flat field that
+ * sits precisely on the threshold produces nothing rather than tracing the
+ * whole grid.
+ */
+function contourSegments(grid, cols, rows, level) {
+  const segments = [];
+  if (!Array.isArray(grid) || cols < 2 || rows < 2) return segments;
+
+  const value = (x, y) => {
+    const point = grid[x * rows + y];
+    if (!point || point.rssi === null || point.rssi === undefined) return null;
+    const v = Number(point.rssi);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  for (let x = 0; x < cols - 1; x++) {
+    for (let y = 0; y < rows - 1; y++) {
+      const tl = value(x, y);
+      const tr = value(x + 1, y);
+      const bl = value(x, y + 1);
+      const br = value(x + 1, y + 1);
+      if (tl === null || tr === null || bl === null || br === null) continue;
+
+      // A cell with no values above the level cannot contain a crossing. This
+      // is also the fast path: most of a room fails it.
+      if (tl <= level && tr <= level && bl <= level && br <= level) continue;
+
+      // Where the level cuts each edge, as a fraction from that edge's origin.
+      const along = (a, b) => {
+        const denom = b - a;
+        // Equal endpoints straddle nothing; clamped so a flat edge cannot
+        // divide by zero.
+        return denom === 0 ? 0.5 : (level - a) / denom;
+      };
+      const top = [x + along(tl, tr), y];
+      const right = [x + 1, y + along(tr, br)];
+      const bottom = [x + along(bl, br), y + 1];
+      const left = [x, y + along(tl, bl)];
+
+      // Four-bit case index: a bit is set when that corner is above the level.
+      const index =
+        (tl > level ? 8 : 0) |
+        (tr > level ? 4 : 0) |
+        (br > level ? 2 : 0) |
+        (bl > level ? 1 : 0);
+
+      // Saddle cases (5 and 10) are ambiguous; resolved the cheap way, which is
+      // fine for a display contour and avoids the centre-average rule.
+      switch (index) {
+        case 1:
+        case 14:
+          segments.push([left, bottom]);
+          break;
+        case 2:
+        case 13:
+          segments.push([bottom, right]);
+          break;
+        case 3:
+        case 12:
+          segments.push([left, right]);
+          break;
+        case 4:
+        case 11:
+          segments.push([top, right]);
+          break;
+        case 6:
+        case 9:
+          segments.push([top, bottom]);
+          break;
+        case 7:
+        case 8:
+          segments.push([left, top]);
+          break;
+        case 5:
+          segments.push([left, top], [bottom, right]);
+          break;
+        case 10:
+          segments.push([top, right], [left, bottom]);
+          break;
+        default:
+          // 0 and 15: entirely below or entirely above.
+          break;
+      }
+    }
+  }
+  return segments;
+}
+
+/** The RSSI levels drawn as contour lines on the map. */
+const CONTOUR_LEVELS = [-50, -70, -85];
+
 class HeatmapRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -13,6 +115,73 @@ class HeatmapRenderer {
     // pointer event before the first frame cannot divide by undefined.
     this.roomWidth = 20;
     this.roomHeight = 15;
+
+    /**
+     * The active colour ramp, and which grid is painted. Both are read by the
+     * renderer each frame rather than baked in, so the toggle is immediate and
+     * the legend can be built from the same ramp.
+     */
+    this.ramp = ColorMapper.DEFAULT_RAMP;
+    this.showContours = true;
+
+    /**
+     * The 1 dB grid, painted once per frame into a tiny offscreen canvas and
+     * then scaled up.
+     *
+     * The room is 20x15 samples and the canvas is over a thousand pixels wide,
+     * so drawing one fillRect per cell meant 300 rects for 300 cells and a
+     * visible staircase at every boundary. Painting the lattice at its own
+     * resolution and letting the compositor's bilinear filter stretch it is a
+     * single drawImage and gives a genuinely smooth field.
+     */
+    this.gridCanvas = document.createElement('canvas');
+    this.gridCtx = this.gridCanvas.getContext('2d');
+    this.gridImage = null;
+
+    /**
+     * Honour prefers-reduced-motion for the pulsing rings.
+     *
+     * Read once and re-read on change: the user can flip the OS setting while
+     * the page is open, and a pulse that keeps going after that is the exact
+     * thing the preference is asking us to stop.
+     */
+    this.reduceMotion = false;
+    this.motionQuery =
+      typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
+    this.readMotionPreference();
+    if (this.motionQuery) {
+      const onChange = () => this.readMotionPreference();
+      if (this.motionQuery.addEventListener) {
+        this.motionQuery.addEventListener('change', onChange);
+      } else if (this.motionQuery.addListener) {
+        this.motionQuery.addListener(onChange);
+      }
+    }
+
+    // A single shared start time, so every pulsing ring is in phase instead of
+    // each one using its own clock and drifting apart.
+    this.phaseStart = 0;
+    /** Segments drawn by the last drawContours call, for verification. */
+    this.lastContoursDrawn = 0;
+  }
+
+  readMotionPreference() {
+    this.reduceMotion = Boolean(this.motionQuery && this.motionQuery.matches);
+  }
+
+  /** 0-1 sawtooth over ~2s, frozen when reduced motion is requested. */
+  pulsePhase() {
+    if (this.reduceMotion) return 0.5;
+    if (!this.phaseStart) this.phaseStart = performance.now();
+    return ((performance.now() - this.phaseStart) % 2000) / 2000;
+  }
+
+  /** Cycle to the next colour ramp. @returns {string} the new ramp. */
+  cycleRamp() {
+    this.ramp = ColorMapper.nextRamp(this.ramp);
+    return this.ramp;
   }
 
   /** Match the backing store to the CSS size so the map is not blurry. */
@@ -47,9 +216,18 @@ class HeatmapRenderer {
       roomHeight,
       { maskGaps: showingMeasured }
     );
+    this.minRssi = data.minRssi ?? -100;
+    this.maxRssi = data.maxRssi ?? -20;
     if (showingMeasured) {
       this.drawSamplePoints(data.measured.points, roomWidth, roomHeight);
     }
+    // Contours go under the furniture: they describe the field, and a wall or a
+    // marker drawn on top of one is more useful than the line.
+    this.drawContours(
+      showingMeasured ? data.measured.grid : heatmap,
+      roomWidth,
+      roomHeight
+    );
     this.drawGrid(roomWidth, roomHeight);
     this.drawTrails(data.trails || {}, roomWidth, roomHeight);
     this.drawWalls(data.walls || [], roomWidth, roomHeight);
@@ -75,27 +253,29 @@ class HeatmapRenderer {
     this.ctx.save();
     this.ctx.lineCap = 'round';
     for (const [, points] of entries) {
-      // One stroke per segment so opacity can ramp along the trail.
+      // One stroke per segment so opacity can ramp along the trail: the head is
+      // the transmitter's current position and the tail is history, so a
+      // constant opacity draws a rope rather than a path.
       for (let i = 1; i < points.length; i++) {
         const t = i / points.length;
-        this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 + t * 0.3})`;
-        this.ctx.lineWidth = 1 + t * 1.5;
+        const fade = t * t;
+        this.ctx.strokeStyle = `rgba(0, 229, 255, ${0.04 + fade * 0.5})`;
+        this.ctx.lineWidth = 0.5 + fade * 2;
         this.ctx.beginPath();
         this.ctx.moveTo(points[i - 1].x * sx, points[i - 1].y * sy);
         this.ctx.lineTo(points[i].x * sx, points[i].y * sy);
         this.ctx.stroke();
       }
+      // A soft dot at the head, so the path's leading edge is not a blunt cut.
+      const head = points[points.length - 1];
+      this.ctx.fillStyle = 'rgba(0, 229, 255, 0.55)';
+      this.ctx.beginPath();
+      this.ctx.arc(head.x * sx, head.y * sy, 1.6, 0, Math.PI * 2);
+      this.ctx.fill();
     }
     this.ctx.restore();
   }
 
-  /**
-   * Estimate vs truth for the tracked transmitter.
-   *
-   * The estimate is a crosshair, the truth keeps its normal marker, and the
-   * line between them is the error. Drawn under the markers so the truth
-   * marker is never hidden by its own error line.
-   */
   drawTracking(tracking, roomWidth, roomHeight) {
     if (!tracking || !tracking.estimate) return;
     const sx = this.canvas.width / roomWidth;
@@ -177,45 +357,181 @@ class HeatmapRenderer {
    * empty canvas with sparse dots.
    */
   paintCells(heatmap, roomWidth, roomHeight, options = {}) {
-    const cellW = this.canvas.width / roomWidth;
-    const cellH = this.canvas.height / roomHeight;
+    const cols = Math.round(roomWidth);
+    const rows = Math.round(roomHeight);
+    if (!Array.isArray(heatmap) || cols < 1 || rows < 1) return;
 
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.globalAlpha = this.cellAlpha / 255;
+    // The lattice is painted at its own resolution - one pixel per 1 dB sample
+    // - and scaled up afterwards, so the bilinear filter has something smooth
+    // to interpolate. Sizing it to the canvas instead would put the staircase
+    // straight back in.
+    if (this.gridCanvas.width !== cols || this.gridCanvas.height !== rows) {
+      this.gridCanvas.width = cols;
+      this.gridCanvas.height = rows;
+    }
+    const gctx = this.gridCtx;
+    gctx.clearRect(0, 0, cols, rows);
 
-    for (const point of heatmap) {
-      const px = Math.floor(point.x * cellW);
-      const py = Math.floor(point.y * cellH);
-      const w = Math.ceil(cellW) + 1;
-      const h = Math.ceil(cellH) + 1;
+    const maskGaps = Boolean(options.maskGaps);
+    const anyGap =
+      maskGaps ||
+      heatmap.some((point) => point.rssi === null || point.rssi === undefined);
 
-      // A cell with no sample near it is unknown, not weak. Leave it bare and
-      // hatch it: painting it with the colour for MIN_RSSI would read as "we
-      // measured nothing here", which is a measurement claim.
-      if (options.maskGaps && point.hasData === false) {
-        this.paintNoData(px, py, w, h);
-        continue;
+    // A gap has to be a real hole in the lattice for the interpolation to
+    // blur around it, so where any gap exists the grid is painted with an
+    // alpha mask and the gap cells left fully transparent. Where there is no
+    // gap the old opaque path is kept, because it is measurably cheaper and
+    // this is the common case for the model grid.
+    if (anyGap) {
+      const image = gctx.createImageData(cols, rows);
+      const px = image.data;
+      for (let i = 0; i < heatmap.length && i < cols * rows; i++) {
+        const point = heatmap[i];
+        // The lattice is column-major - grid[x * rows + y], the order
+        // src/heatmap.js and src/interpolate.js both emit - but ImageData is
+        // row-major: pixel (px, py) lives at py * width + px. Same linear
+        // index, different meaning, so `i * 4` silently transposes the field.
+        // 298 of 300 cells landed wrong in measured mode.
+        //
+        // Driven off point.x/point.y rather than i so the two cannot drift
+        // apart again, whatever order the array is in.
+        const at = (point.y * cols + point.x) * 4;
+        const isGap =
+          !point ||
+          point.rssi === null ||
+          point.rssi === undefined ||
+          (maskGaps && point.hasData === false);
+        if (isGap) continue;
+        const [r, g, b] = ColorMapper.getColor(
+          point.rssi,
+          this.minRssi ?? -100,
+          this.maxRssi ?? -20,
+          this.ramp
+        );
+        px[at] = r;
+        px[at + 1] = g;
+        px[at + 2] = b;
+        px[at + 3] = this.cellAlpha;
       }
-      // The model grid has no hasData field at all; only the measured one can
-      // be masked, and a null rssi there is a gap.
-      if (point.rssi === null || point.rssi === undefined) {
-        this.paintNoData(px, py, w, h);
-        continue;
+      gctx.putImageData(image, 0, 0);
+    } else {
+      for (const point of heatmap) {
+        if (!point || point.rssi === null || point.rssi === undefined) continue;
+        const [r, g, b] = ColorMapper.getColor(
+          point.rssi,
+          this.minRssi ?? -100,
+          this.maxRssi ?? -20,
+          this.ramp
+        );
+        gctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        // +1 hides the hairline seams between adjacent lattice pixels.
+        gctx.fillRect(point.x, point.y, 1.01, 1.01);
       }
-
-      const [r, g, b] = ColorMapper.getColor(point.rssi);
-      this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      // +1 on each dimension hides the hairline seams between adjacent cells.
-      this.ctx.fillRect(px, py, w, h);
     }
 
-    this.ctx.globalAlpha = 1;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // One drawImage, scaled to the room. `imageSmoothingEnabled` plus a high
+    // quality hint is what turns 300 samples into a smooth field; without it
+    // the browser nearest-neighbours and the staircase comes back.
+    this.ctx.save();
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = 'high';
+    this.ctx.drawImage(
+      this.gridCanvas,
+      0,
+      0,
+      this.canvas.width,
+      this.canvas.height
+    );
+    this.ctx.restore();
+
+    // Gaps are marked on top, in canvas space, because a gap has no colour to
+    // interpolate - the hatching says "not measured", which is a different
+    // claim from any colour on this map.
+    if (anyGap) {
+      const cellW = this.canvas.width / roomWidth;
+      const cellH = this.canvas.height / roomHeight;
+      for (const point of heatmap) {
+        if (!point) continue;
+        const isGap =
+          point.rssi === null ||
+          point.rssi === undefined ||
+          (maskGaps && point.hasData === false);
+        if (!isGap) continue;
+        this.paintNoData(
+          Math.floor(point.x * cellW),
+          Math.floor(point.y * cellH),
+          Math.ceil(cellW) + 1,
+          Math.ceil(cellH) + 1
+        );
+      }
+    }
   }
 
   /**
-   * Diagonal hatch over an unpainted cell: unmistakably "no data" rather than
-   * a colour that happens to look like the low end of the scale.
+   * Contour lines at the documented levels.
+   *
+   * Drawn from the same lattice the colour field came from, so a line at -70
+   * sits on the -70 colour rather than near it. Each level gets its own weight
+   * and tint so three lines are distinguishable without a key.
    */
+  drawContours(heatmap, roomWidth, roomHeight) {
+    if (!this.showContours) {
+      // Recorded as 0 rather than left stale, so "are contours on" is a
+      // question with a real answer even after they are switched off.
+      this.lastContoursDrawn = 0;
+      return 0;
+    }
+    const cols = Math.round(roomWidth);
+    const rows = Math.round(roomHeight);
+    const cellW = this.canvas.width / roomWidth;
+    const cellH = this.canvas.height / roomHeight;
+
+    // Weight and tint per level, strongest first. Keyed by dBm so the levels
+    // themselves live in one place - CONTOUR_LEVELS - rather than being
+    // repeated here, which is how a documented level and a drawn level drift
+    // apart.
+    const styles = {
+      '-50': { width: 1.5, alpha: 0.92 },
+      '-70': { width: 1, alpha: 0.62 },
+      '-85': { width: 1, alpha: 0.42 },
+    };
+
+    this.ctx.save();
+    this.ctx.lineCap = 'round';
+    let drawn = 0;
+    for (const level of CONTOUR_LEVELS) {
+      const style = styles[String(level)] || { width: 1, alpha: 0.5 };
+      const segments = contourSegments(heatmap, cols, rows, level);
+      if (segments.length === 0) continue;
+      this.ctx.beginPath();
+      for (const [[ax, ay], [bx, by]] of segments) {
+        this.ctx.moveTo(ax * cellW, ay * cellH);
+        this.ctx.lineTo(bx * cellW, by * cellH);
+      }
+      // Two-tone stroke: a dark casing under a light core.
+      //
+      // Measured, this matters. Against the inferno ramp a white line scores
+      // 14.8:1 at -85 dBm but only 3.61:1 at -50, and the ramp's top end
+      // (252,255,164) is 1.05:1 against white - a single white stroke vanishes
+      // over any strong-signal area. The casing is dark, so it carries the line
+      // where the field is bright and the core carries it where the field is
+      // dark. Either alone fails somewhere on the scale.
+      this.ctx.strokeStyle = `rgba(8, 11, 16, ${Math.min(0.85, style.alpha + 0.15)})`;
+      this.ctx.lineWidth = style.width + 1.6;
+      this.ctx.stroke();
+
+      this.ctx.strokeStyle = `rgba(255, 255, 255, ${style.alpha})`;
+      this.ctx.lineWidth = style.width;
+      this.ctx.stroke();
+      drawn += segments.length;
+    }
+    this.ctx.restore();
+    this.lastContoursDrawn = drawn;
+    return drawn;
+  }
+
   paintNoData(px, py, w, h) {
     this.ctx.fillStyle = '#12161c';
     this.ctx.fillRect(px, py, w, h);
@@ -313,44 +629,59 @@ class HeatmapRenderer {
   drawMarkers(data, roomWidth, roomHeight) {
     const sx = this.canvas.width / roomWidth;
     const sy = this.canvas.height / roomHeight;
+    const phase = this.pulsePhase();
 
     data.sources.forEach((source) => {
       const px = source.x * sx;
       const py = source.y * sy;
-      this.ctx.beginPath();
-      this.ctx.arc(px, py, 9, 0, Math.PI * 2);
-      // Pinned is amber, moving is magenta. That difference is state, not
-      // decoration. Both are the --warning / --magenta tokens from
-      // style.css; the canvas previously used near-misses (#ffd400, #ff2fd0)
-      // that did not match the chrome they sit beside.
+
+      this.ctx.save();
+
+      // Glow. shadowBlur is the honest way to do this on a 2D canvas, and it is
+      // the expensive part of the frame, so it is scoped tightly: a single
+      // fillRect with the blur set, restored immediately after.
+      this.ctx.shadowColor = source.pinned
+        ? 'rgba(243, 182, 31, 0.9)'
+        : 'rgba(255, 43, 214, 0.9)';
+      this.ctx.shadowBlur = 14;
       this.ctx.fillStyle = source.pinned ? '#f3b61f' : '#ff2bd6';
+      this.ctx.beginPath();
+      this.ctx.arc(px, py, 7, 0, Math.PI * 2);
       this.ctx.fill();
-      this.ctx.strokeStyle = '#fff';
-      this.ctx.lineWidth = 2;
-      this.ctx.stroke();
+
+      // A pulsing ring that expands and fades, so a transmitter reads as
+      // emitting rather than sitting there. Frozen when the OS asks for
+      // reduced motion, and then drawn at a fixed radius - a pulse you cannot
+      // see is not worth animating.
+      this.ctx.shadowBlur = 0;
+      const ring = this.reduceMotion ? 12 : 10 + phase * 16;
+      const ringAlpha = this.reduceMotion ? 0.35 : 0.5 * (1 - phase);
+      if (ringAlpha > 0.01) {
+        this.ctx.strokeStyle = source.pinned
+          ? `rgba(243, 182, 31, ${ringAlpha})`
+          : `rgba(255, 43, 214, ${ringAlpha})`;
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.arc(px, py, ring, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
+
+      this.ctx.restore();
       this.drawLabel(source.name, px, py - 14);
     });
 
     data.receivers.forEach((receiver) => {
       const px = receiver.x * sx;
       const py = receiver.y * sy;
+      this.ctx.save();
       this.ctx.strokeStyle = '#39ff88';
       this.ctx.lineWidth = 2;
       this.ctx.strokeRect(px - 7, py - 7, 14, 14);
+      this.ctx.restore();
       this.drawLabel(receiver.id, px, py - 12);
     });
   }
 
-  /**
-   * A marker label: dark pill, light text, monospace.
-   *
-   * The pill is opaque rather than 65% black. A translucent one picks up the
-   * heatmap underneath, so over a hot red cell the label went muddy and the
-   * text on it lost contrast - measured on the rendered pixels, not assumed.
-   * Monospace because these are coordinates: proportional digits make a
-   * decimal point hard to find at 11px, which is how "2.11 m error" gets read
-   * as "21 n error".
-   */
   drawLabel(text, px, py) {
     this.ctx.save();
     this.ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
