@@ -19,7 +19,7 @@
     "express",
     "canvas"
   ],
-  "homepage": "https://github.com/0xsan7/spectrum-mapper#readme",
+  "homepage": "https://spectrum-mapper-demo.onrender.com",
   "bugs": {
     "url": "https://github.com/0xsan7/spectrum-mapper/issues"
   },

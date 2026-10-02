@@ -355,6 +355,106 @@ for (const e of endpoints) {
 }
 
 /*
+ * One deployment URL, used consistently, and described honestly.
+ *
+ * The README, package.json and the deploy page each link the demo, and a
+ * visitor who follows one and then reads another should not find two different
+ * addresses. The honesty checks are here for the same reason: a link that works
+ * but misdescribes what it leads to is worse than no link.
+ */
+{
+  const DEMO_URL = 'https://spectrum-mapper-demo.onrender.com';
+  const readmeText = read('README.md');
+  const pkgJson = JSON.parse(read('package.json'));
+  const deployText = read('docs/deploy.md');
+
+  // The README link, directly under the nav block and labelled.
+  check('README has a Live demo link', /Live demo/.test(readmeText));
+  check(
+    'the README demo link uses the deployment URL',
+    new RegExp(
+      `href="${DEMO_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`
+    ).test(readmeText),
+    'expected the nav link to point at the deployment'
+  );
+  check(
+    'the README demo link sits under the nav links',
+    readmeText.indexOf('Live demo') > readmeText.indexOf('#roadmap') &&
+      readmeText.indexOf('Live demo') - readmeText.indexOf('#roadmap') < 400,
+    'it should be near the top, not buried'
+  );
+  check(
+    'the README says the free host sleeps and the first load is slow',
+    /sleeps when idle/i.test(readmeText) &&
+      /first load can take a while/i.test(readmeText)
+  );
+  check(
+    'the README says everyone shares one room',
+    // Normalised first: prettier reflows the prose, so the phrase spans two
+    // lines and a literal match fails on formatting alone.
+    /everyone shares one simulated room/i.test(readmeText.replace(/\s+/g, ' ')),
+    'the shared-room warning belongs next to the link'
+  );
+
+  check(
+    'package.json homepage is the deployment URL',
+    pkgJson.homepage === DEMO_URL,
+    String(pkgJson.homepage)
+  );
+  check(
+    "deploy.md names the URL as the author's deployment",
+    deployText.includes(DEMO_URL) &&
+      /author/.test(deployText.split(DEMO_URL)[1] || ''),
+    "the URL should be attributed, not presented as the reader's own"
+  );
+  check(
+    'deploy.md still explains deploying your own copy',
+    /deploy(ing)? \*\*your own\*\*/i.test(deployText) ||
+      /New → Blueprint/.test(deployText)
+  );
+
+  // All three, one URL.
+  check(
+    'the README, package.json and deploy.md agree on the demo URL',
+    readmeText.includes(DEMO_URL) &&
+      pkgJson.homepage === DEMO_URL &&
+      deployText.includes(DEMO_URL)
+  );
+  check(
+    'no second onrender.com URL exists in those three files',
+    [
+      ...new Set(
+        [
+          ...`${readmeText}\n${pkgJson.homepage}\n${deployText}`.matchAll(
+            /https?:\/\/[a-z0-9.-]*onrender\.com[a-z0-9./-]*/gi
+          ),
+        ].map((m) => m[0].toLowerCase())
+      ),
+    ].every((u) => u === DEMO_URL.toLowerCase()),
+    'more than one deployment URL is present'
+  );
+
+  // Honesty: the sample survey must never be described as field data.
+  for (const [f, text] of [
+    ['README.md', readmeText],
+    ['docs/deploy.md', deployText],
+  ]) {
+    check(
+      `${f} does not call the bundled survey real measurements`,
+      !/sample survey[^.]{0,80}\breal (measurements|readings|survey data)\b/i.test(
+        text
+      ) && !/real measurements[^.]{0,80}sample/i.test(text),
+      'the shipped CSV is model output with offsets, not field data'
+    );
+  }
+  check(
+    'README says the bundled sample is not field data',
+    /model output with small offsets/i.test(readmeText),
+    'the provenance belongs next to the link'
+  );
+}
+
+/*
  * The preloaded demo survey, documented and shipped.
  *
  * Four things have to be true at once, and the Dockerfile quietly broke one of
@@ -1460,9 +1560,12 @@ if (!block) {
     ),
     repoUrl
   );
+  // The homepage is the live demo, not the README: a visitor arriving from npm
+  // wants the running thing. Kept as an exact value so it cannot drift into a
+  // repository URL or somebody else's deployment by accident.
   check(
-    'homepage points at the README',
-    homepage === 'https://github.com/0xsan7/spectrum-mapper#readme',
+    'homepage is the live demo',
+    homepage === 'https://spectrum-mapper-demo.onrender.com',
     homepage
   );
   check(
