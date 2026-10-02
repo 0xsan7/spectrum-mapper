@@ -155,10 +155,14 @@ test('a null in the grid puts each cell at its own lattice position', () => {
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       if (x === 7 && y === 2) continue;
+      // Full opacity, not cellAlpha. The lattice is composited over an opaque
+      // background and the fillRect branch writes opaque colours, so a texel
+      // below 255 made the same cell dimmer depending only on whether some
+      // other cell happened to be null. See test/paint-alpha.test.js.
       assert.strictEqual(
         pixelAt(img, x, y)[3],
-        renderer.cellAlpha,
-        `cell (${x},${y}) was not written at its own position`
+        255,
+        `cell (${x},${y}) was not written at its own position, opaque`
       );
       opaque++;
     }

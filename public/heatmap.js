@@ -424,7 +424,13 @@ class HeatmapRenderer {
         px[at] = r;
         px[at + 1] = g;
         px[at + 2] = b;
-        px[at + 3] = this.cellAlpha;
+        // A full 255, not cellAlpha. The lattice is composited over the opaque
+        // background and the fillRect branch writes opaque rgb() colours, so
+        // anything below 255 made the same cell dimmer depending only on
+        // whether some other cell in the grid happened to be null - pressing M
+        // shifted the whole field's opacity. The gap texels stay transparent,
+        // which is what lets the interpolation blur around them.
+        px[at + 3] = 255;
       }
       gctx.putImageData(image, 0, 0);
     } else {
