@@ -83,11 +83,24 @@ function contourSegments(grid, cols, rows, level) {
           segments.push([left, top]);
           break;
         case 5:
-          segments.push([left, top], [bottom, right]);
+        case 10: {
+          /* Saddles. The two above-level corners are diagonal, so there are two
+             valid pairings and only one is right. The cell's centre decides:
+             if it is above the level the two above-level corners are joined
+             through it, and the contour separates the two below-level corners
+             instead; if it is below, the join is the other way.
+             Pairing without this reads the corner above the level as one solid
+             mass and drops a line, or draws a crossing where there is none. */
+          const centre = (tl + tr + bl + br) / 4;
+          if (centre > level) {
+            if (index === 5) segments.push([left, top], [bottom, right]);
+            else segments.push([top, right], [left, bottom]);
+          } else {
+            if (index === 5) segments.push([top, right], [left, bottom]);
+            else segments.push([left, top], [bottom, right]);
+          }
           break;
-        case 10:
-          segments.push([top, right], [left, bottom]);
-          break;
+        }
         default:
           // 0 and 15: entirely below or entirely above.
           break;
