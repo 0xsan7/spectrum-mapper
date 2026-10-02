@@ -1793,3 +1793,568 @@ console.log('all README claims check out');
     /dragged transmitter survived the idle reset/i.test(normEntry)
   );
 }
+/*
+ * The design system: tokens, palette, theme toggle, and accessibility.
+ *
+ * The contrast checks below recompute WCAG ratios from the values in
+ * public/style.css rather than asserting that a hex string is present. A check
+ * that only greps for a colour proves the colour is written down; this proves
+ * it is readable, which is the thing that matters and the thing a palette edit
+ * can silently break.
+ */
+{
+  const css = read('public/style.css');
+  const html = read('public/index.html');
+  const theme = read('public/theme.js');
+  const dash = read('public/dashboard.js');
+
+  /** Read `--name: value` out of a given selector block. */
+  const token = (name, from = ':root') => {
+    let scope = '';
+    const idx = css.indexOf(from);
+    if (idx < 0) return null;
+    const start = css.indexOf('{', idx);
+    let depth = 0;
+    let end = start;
+    for (let i = start; i < css.length; i++) {
+      if (css[i] === '{') depth++;
+      else if (css[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    scope = css.slice(start + 1, end);
+    const m = new RegExp(`--${name}:\\s*([^;]+);`).exec(scope);
+    return m ? m[1].trim() : null;
+  };
+
+  const hexToRgb = (value) => {
+    const h = value.replace('#', '').trim();
+    const full =
+      h.length === 3
+        ? h
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : h;
+    if (!/^[0-9a-f]{6}$/i.test(full)) return null;
+    return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  };
+
+  /** WCAG relative luminance. */
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.map((c) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+
+  const contrast = (a, b) => {
+    const la = luminance(hexToRgb(a));
+    const lb = luminance(hexToRgb(b));
+    const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  // Every text colour on every surface it is used on, per theme.
+  for (const [selector, label] of [
+    [':root', 'dark'],
+    ["[data-theme='light']", 'light'],
+  ]) {
+    const surfaces = ['bg', 'surface', 'surface-2', 'surface-3']
+      .map((n) => token(n, selector))
+      .filter(Boolean);
+    if (surfaces.length < 4) {
+      check(
+        `${label} theme defines the surface tokens`,
+        false,
+        'a surface token is missing'
+      );
+      continue;
+    }
+    check(`${label} theme defines the surface tokens`, true);
+
+    for (const name of [
+      'text',
+      'text-dim',
+      'text-muted',
+      'accent',
+      'magenta',
+      'green',
+      'warning',
+      'danger',
+    ]) {
+      const color = token(name, selector);
+      if (!color) {
+        check(`${label} theme defines --${name}`, false, 'token missing');
+        continue;
+      }
+      // The worst case is the lightest surface, since all of these are lighter
+      // than the grounds they sit on.
+      let worst = Infinity;
+      let worstOn = '';
+      for (const surface of surfaces) {
+        const r = contrast(color, surface);
+        if (r < worst) {
+          worst = r;
+          worstOn = surface;
+        }
+      }
+      check(
+        `${label}: --${name} clears WCAG AA text on every surface`,
+        worst >= 4.5,
+        `${worst.toFixed(2)}:1 on ${worstOn} (needs 4.5)`
+      );
+    }
+
+    // A control boundary is non-text: WCAG 1.4.11 asks 3:1.
+    const control = token('border-control', selector);
+    const worstControl = Math.min(...surfaces.map((s) => contrast(control, s)));
+    check(
+      `${label}: --border-control clears 3:1 for a control boundary`,
+      worstControl >= 3,
+      `${worstControl.toFixed(2)}:1 (needs 3)`
+    );
+
+    // The grid backdrop is decorative, so it is deliberately faint; it must not
+    // be so faint that the layout loses its only non-colour separator.
+    const border = token('border', selector);
+    check(
+      `${label}: --border is a visible but quiet hairline`,
+      contrast(border, token('bg', selector)) > 1.1,
+      `${contrast(border, token('bg', selector)).toFixed(2)}:1`
+    );
+  }
+
+  // The palette matches the diagram it claims to match.
+  for (const [name, hex] of [
+    ['cyan', '#00e5ff'],
+    ['magenta', '#ff2bd6'],
+    ['green', '#39ff88'],
+  ]) {
+    check(
+      `the dark --accent palette keeps the diagram's ${name}`,
+      new RegExp(hex, 'i').test(css),
+      `expected ${hex}`
+    );
+  }
+  check(
+    'the ground colour matches docs/architecture.svg',
+    /#0a0e14/i.test(css)
+  );
+
+  // Type and numerals.
+  check('tabular numerals are set for the readouts', /tabular-nums/.test(css));
+  check(
+    'every numeric readout class opts into tabular figures',
+    [
+      '.stat-row value',
+      '.slider-row output',
+      '.legend-labels',
+      '.fps-badge',
+    ].every((sel) => {
+      const i =
+        css.indexOf(sel + ' {') >= 0
+          ? css.indexOf(sel + ' {')
+          : css.indexOf(sel + ',');
+      if (i < 0) return false;
+      const block = css.slice(i, css.indexOf('}', i));
+      return /tabular-nums/.test(block);
+    }),
+    'a readout whose digits jitter as values change'
+  );
+  check('a monospace stack is defined', /--font-mono:/.test(css));
+
+  // No webfont, and nothing fetched from a third party.
+  check(
+    'no font is loaded from a CDN',
+    !/@import\s+url\(|<link[^>]+href=["']https?:/i.test(css + html),
+    'system stacks only'
+  );
+  check(
+    'style.css declares no remote imports',
+    !/@import/.test(css),
+    'a remote @import would be a third-party dependency'
+  );
+
+  // Shape: thin borders, small radii. The brief rules out big soft cards.
+  check(
+    'borders are 1px hairlines',
+    /--border-w:\s*1px/.test(css) && !/border:\s*(2|3|4)px/.test(css),
+    'a thick border reads as a card, not an instrument'
+  );
+  check(
+    'radii stay small',
+    /--radius-sm:\s*[0-3]px/.test(css) && /--radius-md:\s*[0-4]px/.test(css)
+  );
+  check(
+    'no purple/indigo gradient anywhere in the stylesheet',
+    !/linear-gradient\([^)]*(purple|indigo|violet|#8b5cf6|#6366f1)/i.test(css),
+    'the default-template look this replaces'
+  );
+
+  // Accessibility affordances.
+  // Not just /outline:/ - `outline: none` contains that substring, so removing
+  // the ring and replacing it with `color` both passed the original check.
+  const focusBlock = (/:focus-visible\s*\{([^}]*)\}/.exec(css) || [])[1] || '';
+  const focusOutline = /outline:\s*([^;]+);/.exec(focusBlock);
+  check(
+    'focus is always visible',
+    focusOutline !== null,
+    'no :focus-visible rule at all'
+  );
+  check(
+    'the focus ring is a real ring, not outline: none',
+    focusOutline !== null &&
+      !/^none$/i.test(focusOutline[1].trim()) &&
+      /\b[2-9]px|\b1\.\d+px/.test(focusOutline[1]),
+    `outline: ${focusOutline ? focusOutline[1].trim() : 'missing'}`
+  );
+  check(
+    'the focus ring is offset from the element it marks',
+    /outline-offset/.test(focusBlock),
+    'a ring flush against a 1px border is easy to lose'
+  );
+  check(
+    'reduced motion is respected',
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(css)
+  );
+  check(
+    'forced-colors mode is handled',
+    /@media\s*\(forced-colors:\s*active\)/.test(css)
+  );
+
+  // Icon-only buttons carry an accessible name.
+  const iconButtons = [
+    ...html.matchAll(/<button\b[^>]*class="[^"]*icon-btn[^"]*"[^>]*>/g),
+  ].map((m) => m[0]);
+  check('there is an icon-only button to check', iconButtons.length > 0);
+  check(
+    'every icon-only button has an aria-label',
+    iconButtons.length > 0 && iconButtons.every((b) => /aria-label=/.test(b)),
+    'an icon with no label is invisible to a screen reader'
+  );
+  check(
+    'the decorative glyph inside it is hidden from assistive tech',
+    /id="themeGlyph"[^>]*aria-hidden="true"/.test(html)
+  );
+
+  // The connection pill announces itself.
+  // A hidden file dialog has no business in the tab order: the labelled button
+  // next to it is the control, and an unnamed input is a dead stop for a
+  // keyboard user.
+  check(
+    'the hidden file picker is out of the tab order and unnamed',
+    /id="csvPicker"[\s\S]{0,200}tabindex="-1"/.test(html) &&
+      /id="csvPicker"[\s\S]{0,200}aria-hidden="true"/.test(html)
+  );
+  check(
+    'the button that opens the picker does carry a name',
+    /id="importCsv"[^>]*>[\s\S]{0,80}?Import readings CSV/.test(html)
+  );
+
+  check(
+    'the connection pill is a live region',
+    /id="statusPill"[\s\S]{0,200}role="status"/.test(html) &&
+      /id="statusPill"[\s\S]{0,200}aria-live="polite"/.test(html)
+  );
+  check('the header shows a mode badge', /id="modeBadge"/.test(html));
+  check('the header shows an fps readout', /id="fpsBadge"/.test(html));
+
+  // The theme toggle: persisted, and safe when storage is unavailable.
+  check(
+    'the theme toggle is wired',
+    /getElementById\('themeToggle'\)/.test(theme) &&
+      /addEventListener\('click'/.test(theme)
+  );
+  check(
+    'the theme is persisted to localStorage',
+    /localStorage\.setItem/.test(theme)
+  );
+  // Structural, not a count. Counting localStorage references against try
+  // blocks passed only because there happened to be an extra try in
+  // systemPrefersLight: drop that one and the count balances while an
+  // unwrapped setItem sails through.
+  const storageCalls = [...theme.matchAll(/localStorage\.[a-zA-Z]+/g)].map(
+    (m) => m[0]
+  );
+  const guardFor = (call) => {
+    const at = theme.indexOf(call);
+    // Walk back to the start of the method and confirm it opens with a try.
+    const before = theme.slice(0, at);
+    const methodStart = before.lastIndexOf('static ');
+    const body = theme.slice(methodStart, at);
+    return /try\s*\{/.test(body);
+  };
+  check(
+    'every storage access is wrapped in try/catch',
+    storageCalls.length >= 2 && storageCalls.every(guardFor),
+    'a theme preference must never break the page'
+  );
+  // The listener cannot be attached from the same call that applies the theme:
+  // this script runs from <head>, where the button does not exist yet. Wiring
+  // it there looked correct and left the button inert.
+  // Comments stripped first. Every check below looks for code that has to be
+  // *executed*, and a commented-out line still contains all the text a regex
+  // wants: `// ThemeToggle.wire();` satisfied "init calls wire" while the button
+  // stayed inert, which is the exact bug this block is for.
+  const themeCode = theme
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/^\s*\/\/.*$/, ''))
+    .join('\n');
+
+  check(
+    'the click listener is attached after the DOM exists',
+    /DOMContentLoaded/.test(themeCode) &&
+      /document\.readyState === 'loading'/.test(themeCode),
+    'attaching from <head> finds no button and does nothing'
+  );
+  check(
+    'init actually calls the wiring',
+    /static init\(\)[\s\S]{0,900}?ThemeToggle\.wire\(\)/.test(themeCode),
+    'a wire() nothing calls leaves the button inert'
+  );
+  check(
+    'the toggle has exactly one click listener',
+    (themeCode.match(/addEventListener\('click'/g) || []).length === 1,
+    'two would flip the theme twice per click'
+  );
+  check(
+    'the theme is applied before first paint, not deferred',
+    /static init\(\)[\s\S]{0,400}?ThemeToggle\.apply/.test(themeCode) &&
+      !/DOMContentLoaded[\s\S]{0,200}ThemeToggle\.apply\(stored/.test(
+        themeCode
+      ),
+    'applying on DOMContentLoaded flashes the wrong background'
+  );
+  check(
+    'the label and glyph are refreshed once the button exists',
+    /ThemeToggle\.apply\(ThemeToggle\.current\(\), false\)/.test(theme),
+    'otherwise the button keeps the aria-label it was parsed with'
+  );
+  check(
+    'matchMedia is guarded too',
+    /static systemPrefersLight\(\)\s*\{\s*try\s*\{/.test(theme),
+    'matchMedia is absent in some embedded webviews'
+  );
+  check(
+    'the theme script loads before the page renders',
+    /<script src="theme\.js"><\/script>/.test(html) &&
+      html.indexOf('theme.js') < html.indexOf('<body'),
+    'deferred, it flashes the wrong background on every load'
+  );
+  check(
+    'an unknown stored value falls back rather than applying',
+    /THEMES\.includes\(stored\)/.test(theme)
+  );
+
+  // The pill state is driven by a data attribute, and the badge by the renderer.
+  check(
+    'the pill state comes from the socket state, not a guess',
+    /setConnectionState\(state\)/.test(dash)
+  );
+  // The assignment must be derived from the argument. Writing a literal
+  // 'connected' into dataset.state satisfies /dataset\.state/ while the pill
+  // lies about every state but one.
+  check(
+    'the pill value is derived from the socket state, not hardcoded',
+    /this\.statusPill\.dataset\.state = [^;]*\bkey\b/.test(dash) &&
+      /const key = String\(state\)\.toLowerCase\(\)/.test(dash)
+  );
+  check(
+    'an unrecognised state falls back rather than showing a wrong one',
+    /known\.includes\(key\)/.test(dash),
+    'an unknown state must not be written through to the CSS'
+  );
+  check(
+    'the mode badge tracks renderer.mapMode',
+    /this\.modeBadge\.dataset\.mode = mode/.test(dash)
+  );
+  check(
+    'the fps window is bounded',
+    /while \(this\.frameTimes\.length[\s\S]{0,80}shift\(\)/.test(dash),
+    'an unbounded array here is a slow leak on a long-lived tab'
+  );
+}
+
+/*
+ * The canvas palette and the stylesheet palette are one palette.
+ *
+ * They drifted: the map drew #ff2fd0 and #00ff88 while the chrome beside it
+ * used #ff2bd6 and #39ff88. Two shades of "magenta" on the same screen reads
+ * as a mistake even when neither is wrong on its own.
+ */
+{
+  const heatmapSrc = read('public/heatmap.js');
+  const css = read('public/style.css');
+  const token = (name) => {
+    const start = css.indexOf(':root');
+    const open = css.indexOf('{', start);
+    const close = css.indexOf('}', open);
+    const m = new RegExp(`--${name}:\\s*([^;]+);`).exec(css.slice(open, close));
+    return m ? m[1].trim() : null;
+  };
+
+  for (const [name, why] of [
+    ['accent', 'the receiver outline and the label hairline'],
+    ['magenta', 'a moving transmitter'],
+    ['green', 'a receiver'],
+    ['warning', 'a pinned transmitter and the estimate'],
+  ]) {
+    const hex = token(name);
+    if (!hex) {
+      check(`the canvas uses the --${name} token`, false, 'token missing');
+      continue;
+    }
+    const rgb = hex
+      .replace('#', '')
+      .match(/.{2}/g)
+      .map((h) => parseInt(h, 16));
+    const asRgba = `rgba(${rgb.join(', ')}`;
+    check(
+      `the canvas uses the --${name} token`,
+      heatmapSrc.includes(hex) || heatmapSrc.includes(asRgba),
+      `${why}: expected ${hex}`
+    );
+  }
+
+  // Comments excluded: the block above explains which colours were replaced, so
+  // naming them in prose kept failing this.
+  const heatmapCode = heatmapSrc
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/^\s*\/\/.*$/, ''))
+    .join('\n');
+  check(
+    'no near-miss duplicates of the palette remain in the canvas',
+    !/#ff2fd0|#00ff88|#ffd400|255, 212, 0/i.test(heatmapCode),
+    'a second shade of the same hue reads as an accident'
+  );
+  // The defect was a *pill* drawn outside drawLabel - its own font, its own
+  // background rect, its own colour. A bare fillText is fine (the wall index
+  // draws one), so the check looks for the pill pattern specifically.
+  const drawLabelAt = heatmapCode.indexOf('drawLabel(text, px, py)');
+  const drawLabelEnd = heatmapCode.indexOf('\n  }', drawLabelAt);
+  const outside =
+    heatmapCode.slice(0, drawLabelAt) + heatmapCode.slice(drawLabelEnd);
+  const strayPills = [...outside.matchAll(/fillRect\(/g)].filter((m) => {
+    const after = outside.slice(m.index, m.index + 400);
+    return /fillText\(/.test(after) && /ctx\.font\s*=/.test(after);
+  });
+  check(
+    'label pills are only drawn by drawLabel',
+    strayPills.length === 0,
+    'a hand-rolled label drifts from the shared one, as it did'
+  );
+  check(
+    'the tracking error uses the shared label',
+    /drawLabel\(\s*`\$\{tracking\.errorMetres[\s\S]{0,120}?drawLabel/.test(
+      heatmapCode
+    ) || /drawLabel\([\s\S]{0,80}tracking\.errorMetres/.test(heatmapCode)
+  );
+  check(
+    'pinned and moving transmitters still differ',
+    /source\.pinned\s*\?\s*'#[0-9a-f]{6}'\s*:\s*'#[0-9a-f]{6}'/i.test(
+      heatmapSrc
+    ),
+    'that difference is state, not decoration'
+  );
+}
+
+/*
+ * The header readouts were measured at 11px and read as too small for the
+ * primary status surface.
+ *
+ * The size is resolved through the token rather than read as a literal: the
+ * stylesheet says font-size: var(--text-sm), so a check that greps for a px
+ * value reports "unknown" on perfectly correct code - which it did, on the
+ * first run, failing the clean tree.
+ */
+{
+  const css = read('public/style.css');
+
+  /** Resolve a font-size declaration to px, following var() into :root. */
+  const pxOf = (declaration) => {
+    if (!declaration) return 0;
+    const value = declaration.trim();
+    const root = css.slice(
+      css.indexOf(':root'),
+      css.indexOf('}', css.indexOf(':root'))
+    );
+    let resolved = value;
+    for (let i = 0; i < 5 && resolved.includes('var('); i++) {
+      resolved = resolved.replace(/var\((--[a-z0-9-]+)\)/gi, (_, name) => {
+        const m = new RegExp(`${name}:\\s*([^;]+);`).exec(root);
+        return m ? m[1].trim() : '';
+      });
+    }
+    const rem = /^([\d.]+)rem$/.exec(resolved);
+    if (rem) return parseFloat(rem[1]) * 16;
+    const px = /^([\d.]+)px$/.exec(resolved);
+    return px ? parseFloat(px[1]) : 0;
+  };
+
+  /**
+   * The declaration of one property inside the rule that sets `selector`.
+   *
+   * Handles grouped selectors: .mode-badge is declared in
+   * ".mode-badge,\n.fps-badge { ... }", so looking for ".mode-badge {" found
+   * nothing and reported the badge as unstyled.
+   */
+  const declIn = (selector, prop) => {
+    const direct = css.indexOf(selector + ' {');
+    if (direct >= 0) {
+      const block = css.slice(direct, css.indexOf('}', direct));
+      const m = new RegExp(`${prop}:\\s*([^;]+);`).exec(block);
+      return m ? m[1] : null;
+    }
+    // Grouped: walk selectors backwards to the '{' that opens the rule.
+    let from = 0;
+    for (;;) {
+      const at = css.indexOf(selector, from);
+      if (at < 0) return null;
+      const brace = css.indexOf('{', at);
+      if (brace < 0) return null;
+      // Comments stripped first: a comment between the previous rule and this
+      // one becomes part of the "selector" text and breaks the comparison.
+      const selectors = css
+        .slice(css.lastIndexOf('}', brace) + 1, brace)
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      const list = selectors
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (list.length > 1 && list.includes(selector)) {
+        const block = css.slice(brace, css.indexOf('}', brace));
+        const m = new RegExp(`${prop}:\\s*([^;]+);`).exec(block);
+        return m ? m[1] : null;
+      }
+      from = at + selector.length;
+    }
+  };
+
+  for (const [selector, label] of [
+    ['.status', 'connection pill'],
+    ['.fps-badge', 'fps badge'],
+    ['.mode-badge', 'mode badge'],
+  ]) {
+    const px = pxOf(declIn(selector, 'font-size'));
+    check(
+      `the ${label} is at least 12px`,
+      px >= 12,
+      `declared ${declIn(selector, 'font-size')} = ${px || 'unknown'}px`
+    );
+  }
+
+  const glyphPx = pxOf(declIn('#themeGlyph', 'width'));
+  check(
+    'the theme glyph is big enough to recognise',
+    glyphPx >= 15,
+    `at ${glyphPx || 'unknown'}px the crescent read as a circular arrow`
+  );
+}

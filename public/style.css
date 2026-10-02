@@ -1,3 +1,118 @@
+/*
+ * Spectrum Mapper - design tokens and chrome.
+ *
+ * The palette is the one docs/architecture.svg already uses, so the app and the
+ * diagram read as the same instrument: #0a0e14 ground, cyan for the signal,
+ * magenta for the estimate, green for the tracked transmitter. Thin 1px rules
+ * and small radii rather than big soft cards, because this is an instrument
+ * panel, not a marketing page.
+ *
+ * Every text colour below clears WCAG AA (4.5:1) against the surfaces it is
+ * actually used on, and --border-control clears the 3:1 that WCAG 1.4.11 asks
+ * of a control boundary. scripts/verify-readme.js recomputes those ratios from
+ * this file, so a colour cannot be darkened into a failure without the build
+ * noticing.
+ *
+ * No font is downloaded: the stacks below are system faces only.
+ */
+
+/* ---- tokens ---------------------------------------------------------- */
+
+:root {
+  color-scheme: dark;
+
+  /* Ground and surfaces */
+  --bg: #0a0e14;
+  --surface: #0e141d;
+  --surface-2: #121a25;
+  --surface-3: #16202d;
+
+  /* Hairlines. --border is decorative separation; --border-control is the one
+     that has to be visible as a boundary, so it is much lighter. */
+  --border: #1e2a38;
+  --border-strong: #2f4557;
+  --border-control: #52768f;
+
+  /* Type */
+  --text: #dce6f0;
+  --text-dim: #c3d3e2;
+  --text-muted: #8ba3b8;
+
+  /* Signal, estimate, tracked. */
+  --accent: #00e5ff;
+  --accent-dim: #52768f;
+  --magenta: #ff2bd6;
+  --green: #39ff88;
+  --warning: #f3b61f;
+  --danger: #ff5c5c;
+
+  /* Accent washes, for backgrounds behind accent text. */
+  --accent-wash: rgba(0, 229, 255, 0.09);
+  --warning-wash: rgba(243, 182, 31, 0.1);
+  --danger-wash: rgba(255, 92, 92, 0.1);
+
+  /* Spacing: 4px base, so every gap is a multiple and nothing is arbitrary. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+
+  /* Type scale. Labels are small and letterspaced, the way an instrument
+     silkscreens them; numerals are monospace so digits do not jitter. */
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono',
+    monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.375rem;
+
+  /* Small radii only. */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+
+  --border-w: 1px;
+  --header-h: 3.25rem;
+}
+
+/* Light theme. Not an inversion: the accents are darkened to hold AA on paper,
+   because #00e5ff on white is unreadable and would fail the checks above. */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f4f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f6;
+  --surface-3: #e4ebf1;
+
+  --border: #d3dde5;
+  --border-strong: #b3c3cf;
+  --border-control: #52768f;
+
+  --text: #10202e;
+  --text-dim: #24384a;
+  --text-muted: #3d5668;
+
+  --accent: #00566b;
+  --accent-dim: #52768f;
+  --magenta: #8f0865;
+  --green: #0a6b3d;
+  --warning: #7a5200;
+  --danger: #a11212;
+
+  --accent-wash: rgba(0, 86, 107, 0.08);
+  --warning-wash: rgba(122, 82, 0, 0.09);
+  --danger-wash: rgba(161, 18, 18, 0.08);
+}
+
+/* ---- reset ----------------------------------------------------------- */
+
 * {
   margin: 0;
   padding: 0;
@@ -5,9 +120,18 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  background: #0a0a0a;
-  color: #e0e0e0;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--text);
+  /* The faint instrument grid. Two hairlines 24px apart, drawn from --border
+     at low alpha so it reads as a backdrop and not as content. */
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
 }
 
 .container {
@@ -22,33 +146,160 @@ body {
   overflow: hidden;
 }
 
+/* ---- header ---------------------------------------------------------- */
+
 header {
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
-  padding: 16px 24px;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--header-h);
+  padding: 0 var(--space-4);
+  background: var(--surface);
+  border-bottom: var(--border-w) solid var(--border);
   flex-wrap: wrap;
 }
 
+.header-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 header h1 {
-  font-size: 22px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: #00d4ff;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 header p {
-  font-size: 13px;
-  color: #888;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.status {
-  font-size: 12px;
-  color: #00ff88;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+/* Push the readouts to the right, but let them wrap on a narrow screen rather
+   than shoving the title off. */
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: wrap;
 }
+
+/* Connection pill. The state word carries the meaning; the dot is redundant
+   reinforcement, which is why the pill has an accessible label too. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.15rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.status[data-state='connected'] {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 40%, var(--border));
+}
+
+.status[data-state='connected']::before {
+  background: var(--green);
+}
+
+.status[data-state='disconnected'],
+.status[data-state='connection error'],
+.status[data-state='reconnect limit reached'] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.status[data-state='disconnected']::before,
+.status[data-state='connection error']::before,
+.status[data-state='reconnect limit reached']::before {
+  background: var(--danger);
+}
+
+/* Mode badge: which map layer is painted. */
+.mode-badge,
+.fps-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: var(--border-w) solid var(--border-control);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.mode-badge[data-mode='measured'] {
+  color: var(--magenta);
+  border-color: color-mix(in srgb, var(--magenta) 45%, var(--border));
+}
+
+.mode-badge[data-mode='model'] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+/* Icon-only control. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  flex: none;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: var(--border-w) solid var(--border-control);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* The theme icon. Inline SVG sized here rather than trusted to its own
+   width/height attributes, so it scales with the button. */
+#themeGlyph {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+/* ---- main / map ------------------------------------------------------ */
 
 main {
   display: flex;
@@ -56,14 +307,12 @@ main {
   /* Without this, main cannot shrink below its content and the canvas cap
      never engages - the flex base size wins. */
   min-height: 0;
-  gap: 16px;
-  padding: 16px;
+  gap: var(--space-4);
+  padding: var(--space-4);
   /* stretch, not flex-start: each column needs a definite height for the
      canvas's percentage max-height to resolve. */
   align-items: stretch;
 }
-
-/* ---- map ---- */
 
 .map-section {
   flex: 1;
@@ -74,11 +323,12 @@ main {
 }
 
 .map-section h2 {
-  font-size: 13px;
+  font-size: var(--text-xs);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #888;
-  margin-bottom: 8px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
 }
 
 .canvas-wrapper {
@@ -96,9 +346,9 @@ main {
      the 4:3 map renders at 2:1. */
   justify-content: center;
   align-items: center;
-  background: #000;
-  border: 1px solid #333;
-  border-radius: 4px;
+  background: var(--bg);
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -122,73 +372,455 @@ main {
   cursor: grabbing;
 }
 
-/* ---- tooltip ---- */
+/* ---- tooltip --------------------------------------------------------- */
 
 .tooltip {
   position: absolute;
   z-index: 20;
   pointer-events: none;
-  background: rgba(10, 10, 10, 0.94);
-  border: 1px solid #00d4ff;
-  border-radius: 3px;
-  padding: 5px 9px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 11px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border: var(--border-w) solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
   white-space: nowrap;
 }
 
 .tooltip .tt-rssi {
-  color: #00d4ff;
+  color: var(--accent);
   font-weight: 600;
 }
 
 .tooltip .tt-pos {
-  color: #888;
+  color: var(--text-muted);
 }
 
-/* ---- legend ---- */
+/* ---- legend ---------------------------------------------------------- */
 
 .legend {
-  margin-top: 10px;
+  margin-top: var(--space-2);
   /* flex-shrink:0 so the canvas area gives up height first. Without it a very
      short viewport squeezes the legend - the exact thing this fixes. */
   flex-shrink: 0;
 }
 
 .legend-bar {
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid #333;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  border: var(--border-w) solid var(--border-strong);
 }
 
 .legend-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: #888;
-  margin-top: 4px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
 }
 
 .legend-hint,
 .hint {
-  font-size: 11px;
-  color: #777;
-  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
   line-height: 1.5;
 }
 
-/* ---- sidebar ---- */
+/* ---- sidebar --------------------------------------------------------- */
 
 .info-section {
-  width: 300px;
+  width: 19rem;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: calc(100vh - 100px);
+  gap: var(--space-2);
+  max-height: calc(100vh - var(--header-h) - var(--space-5));
   overflow-y: auto;
 }
+
+.panel {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.panel h3 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+/* ---- buttons --------------------------------------------------------- */
+
+button {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border-control);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+
+button:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:active {
+  background: var(--accent-wash);
+}
+
+button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Keyboard focus, everywhere, always visible. :focus-visible so a mouse click
+   does not leave a ring behind, and a two-tone ring so it survives on any
+   background including the accent-filled active state. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.button-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.button-row button {
+  flex: 1 1 auto;
+}
+
+/* ---- sliders and inputs ---------------------------------------------- */
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.slider-row label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.slider-row output,
+.wall-controls output {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  text-align: right;
+}
+
+.slider-row input[type='range'],
+.wall-controls input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+  background: transparent;
+}
+
+/* Range thumbs get an explicit height so the track is grabbable on touch. */
+.slider-row input[type='range']::-webkit-slider-thumb,
+.wall-controls input[type='range']::-webkit-slider-thumb {
+  height: 0.85rem;
+  width: 0.5rem;
+  background: var(--accent);
+  border: var(--border-w) solid var(--bg);
+  border-radius: 1px;
+  cursor: pointer;
+}
+
+.wall-controls input[type='range'] {
+  accent-color: var(--warning);
+}
+
+.wall-controls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.wall-controls label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+/* ---- lists ----------------------------------------------------------- */
+
+.info-item {
+  padding: var(--space-1) 0;
+  border-bottom: var(--border-w) solid var(--border);
+  font-size: var(--text-base);
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-item .name {
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.info-item .meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: 1px;
+  padding: 0 0.25rem;
+}
+
+.pin {
+  color: var(--warning);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ---- walls ----------------------------------------------------------- */
+
+.walls-list {
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+
+.wall-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+
+.wall-row button {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  padding: 0 0.3rem;
+  background: transparent;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.wall-row button:hover {
+  background: var(--danger-wash);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---- stats ----------------------------------------------------------- */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  padding: 1px 0;
+}
+
+.stat-row label {
+  color: var(--text-muted);
+}
+
+.stat-row value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- time-series chart ------------------------------------------------ */
+
+.rssi-chart {
+  width: 100%;
+  height: 6.875rem;
+  display: block;
+  background: var(--bg);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.chart-legend {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.chart-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 2px;
+}
+
+.swatch-avg {
+  background: var(--accent);
+}
+
+.swatch-err {
+  background: var(--magenta);
+}
+
+/* ---- export ---------------------------------------------------------- */
+
+.export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.export-buttons button {
+  flex: 1 1 auto;
+  padding: 0.25rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ---- trilateration readout -------------------------------------------- */
+
+.reading-table {
+  width: 100%;
+  margin-top: var(--space-2);
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.reading-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-muted);
+  border-bottom: var(--border-w) solid var(--border);
+  padding: 2px 0;
+}
+
+.reading-table td {
+  padding: 2px 0;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.reading-table td:first-child {
+  color: var(--accent);
+}
+
+/* ---- coverage --------------------------------------------------------- */
+
+.spectrum-bar-wrap {
+  display: flex;
+  height: 8px;
+  margin: var(--space-2) 0 var(--space-1);
+  border: var(--border-w) solid var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.spectrum-bar {
+  height: 100%;
+}
+
+.spectrum-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.spectrum-key span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.spectrum-key i {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  display: inline-block;
+}
+
+/*
+ * Shown only when the server reports demo mode. Deliberately loud: a shared
+ * room is a surprising thing to walk into, and a visitor should not have to
+ * work out why their dragging had no effect.
+ *
+ * Hidden until the server reports demo mode, so a normal install shows nothing
+ * and loses no vertical space to it.
+ */
+.demo-banner {
+  margin: var(--space-2) var(--space-4) 0;
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-w) solid
+    color-mix(in srgb, var(--warning) 55%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--warning-wash);
+  color: var(--warning);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+/* Explicit, so the attribute always wins over the display rules above. */
+.demo-banner[hidden] {
+  display: none;
+}
+
+/* ---- narrow layout ---------------------------------------------------- */
 
 body.narrow main {
   flex-direction: column;
@@ -209,355 +841,73 @@ body.narrow .info-section {
   overflow-y: visible;
 }
 
-.panel {
-  background: #141414;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
-  padding: 12px;
+body.narrow header {
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-2);
 }
 
-.panel h3 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #00d4ff;
-  margin-bottom: 8px;
+/* On a phone the header wraps to two rows; the readouts keep their own row and
+   the title does not get squeezed to nothing. */
+body.narrow .header-title {
+  flex: 1 1 100%;
 }
 
-/* ---- sliders ---- */
-
-.slider-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 8px;
-  margin-bottom: 12px;
-}
-
-.slider-row label {
-  font-size: 12px;
-  color: #bbb;
-}
-
-.slider-row output {
-  font-size: 12px;
-  color: #00d4ff;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  text-align: right;
-}
-
-.slider-row input[type='range'] {
-  grid-column: 1 / -1;
+body.narrow .header-meta {
+  margin-left: 0;
   width: 100%;
-  accent-color: #00d4ff;
 }
 
-/* ---- lists ---- */
-
-.info-item {
-  padding: 5px 0;
-  border-bottom: 1px solid #222;
-  font-size: 12px;
-}
-
-.info-item:last-child {
-  border-bottom: none;
-}
-
-.info-item .name {
-  color: #e0e0e0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.info-item .meta {
-  color: #888;
-  font-size: 11px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  margin-top: 2px;
-}
-
-.badge {
-  font-size: 9px;
-  background: #2a2a2a;
-  color: #888;
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-family: ui-monospace, monospace;
-}
-
-.pin {
-  color: #ffd400;
-  font-size: 10px;
-}
-
-/* ---- walls ---- */
-
-.wall-controls {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.wall-controls label {
-  font-size: 12px;
-  color: #bbb;
-}
-
-.wall-controls output {
-  font-size: 12px;
-  color: #00d4ff;
-  font-family: ui-monospace, monospace;
-}
-
-.wall-controls input[type='range'] {
-  grid-column: 1 / -1;
-  width: 100%;
-  accent-color: #ff8800;
-}
-
-.walls-list {
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.wall-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  color: #bbb;
-  padding: 3px 0;
-  font-family: ui-monospace, monospace;
-}
-
-.wall-row button {
-  background: none;
-  border: 1px solid #444;
-  color: #ff6060;
-  cursor: pointer;
-  border-radius: 2px;
-  padding: 0 5px;
-  font-size: 11px;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.wall-row button:hover {
-  background: #2a0000;
-}
-
-/* ---- stats ---- */
-
-.stats {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 2px 0;
-}
-
-.stat-row label {
-  color: #888;
-}
-
-.stat-row value {
-  color: #e0e0e0;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-}
-
-/* ---- time-series chart ---- */
-
-.rssi-chart {
-  width: 100%;
-  height: 110px;
-  display: block;
-  background: #080808;
-  border: 1px solid #1e1e1e;
-  border-radius: 3px;
-}
-
-.chart-legend {
-  float: right;
-  font-size: 9px;
-  color: #666;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.chart-legend i {
-  display: inline-block;
-  width: 8px;
-  height: 2px;
-  margin: 0 3px 0 8px;
-  vertical-align: middle;
-}
-
-.swatch-avg {
-  background: #00d4ff;
-}
-
-.swatch-err {
-  background: #ffd400;
-}
-
-/* ---- export ---- */
-
-.export-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.export-buttons button {
-  flex: 1 1 auto;
-  padding: 5px 8px;
-  background: #141414;
-  color: #00d4ff;
-  border: 1px solid #242424;
-  border-radius: 3px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 10px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.export-buttons button:hover {
-  background: #1e1e1e;
-}
-
-.export-buttons button:active {
-  background: #00d4ff;
-  color: #0a0a0a;
-}
-
-/* ---- trilateration readout ---- */
-
-.reading-table {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-  font-size: 10px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  color: #888;
-}
-
-.reading-table th {
-  text-align: left;
-  font-weight: 400;
-  color: #666;
-  border-bottom: 1px solid #222;
-  padding: 2px 0;
-}
-
-.reading-table td {
-  padding: 2px 0;
-  border-bottom: 1px solid #1a1a1a;
-}
-
-.reading-table td:first-child {
-  color: #00d4ff;
-}
-
-/* ---- coverage ---- */
-
-.spectrum-bar-wrap {
-  display: flex;
-  height: 10px;
-  margin: 8px 0 6px;
-  border-radius: 2px;
-  overflow: hidden;
-  background: #1a1a1a;
-}
-
-.spectrum-bar {
-  height: 100%;
-}
-
-.spectrum-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font-size: 10px;
-  color: #888;
-}
-
-.spectrum-key span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.spectrum-key i {
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  display: inline-block;
-}
-
-/* ---- controls ---- */
-
-.button-row {
-  display: flex;
-  gap: 8px;
-}
-
-button {
-  background: #1f1f1f;
-  border: 1px solid #333;
-  color: #e0e0e0;
-  padding: 7px 14px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-button:hover {
-  background: #2a2a2a;
-  border-color: #00d4ff;
-}
-
-button:active {
-  transform: translateY(1px);
-}
-
-/*
- * Shown only when the server reports demo mode. Deliberately loud: a shared
- * room is a surprising thing to walk into, and a visitor should not have to
- * work out why their dragging had no effect.
- */
-.demo-banner {
-  margin: 8px 0 0;
-  padding: 8px 12px;
-  border: 1px solid #d08700;
-  border-radius: 4px;
-  background: rgba(208, 135, 0, 0.12);
-  color: #f0b429;
-  font-size: 13px;
-  text-align: center;
-}
-
-/* Public-demo banner. Hidden until the server reports demo mode, so a normal
-   install shows nothing and loses no vertical space to it. */
-.demo-banner {
-  margin: 0 0 0.6rem;
-  padding: 0.45rem 0.8rem;
-  border: 1px solid #6b5518;
-  border-radius: 4px;
-  background: #2a2410;
-  color: #f3d98b;
-  font-size: 0.82rem;
-  text-align: center;
-}
-
-/* Explicit, so the attribute always wins over the display rules above. */
-.demo-banner[hidden] {
+body.narrow header p {
   display: none;
+}
+
+body.narrow .canvas-wrapper {
+  /* Below the 768px breakpoint the wrapper no longer has a definite height to
+     resolve a percentage against, so the canvas needs a ratio-driven box of
+     its own or it collapses. */
+  aspect-ratio: 4 / 3;
+  flex: none;
+}
+
+body.narrow .demo-banner {
+  margin: var(--space-2) var(--space-3) 0;
+}
+
+body.narrow main {
+  padding: var(--space-3);
+  gap: var(--space-3);
+}
+
+/* ---- reduced motion --------------------------------------------------- */
+
+/* Every transition in this file is a colour or a small transform; none of them
+   carry information that is not also in the text, so removing them costs
+   nothing and the pulse/glow added in phase 2 must respect this too. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- forced colors ---------------------------------------------------- */
+
+/* Windows high contrast: let the system palette through and keep the borders,
+   which is the only thing holding this layout together. */
+@media (forced-colors: active) {
+  .panel,
+  .status,
+  .legend-bar,
+  .canvas-wrapper,
+  .spectrum-bar-wrap {
+    border: 1px solid CanvasText;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
 }

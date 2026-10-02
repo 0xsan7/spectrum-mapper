@@ -6,13 +6,81 @@
     <title>Spectrum Mapper</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
+    <!-- Synchronous, and first: it applies the stored theme before first paint.
+         See public/theme.js for why a deferred script here would flash. -->
+    <script src="theme.js"></script>
   </head>
   <body>
     <div class="container">
       <header>
-        <h1>Spectrum Mapper</h1>
-        <p>RF signal strength distribution</p>
-        <div class="status"><span id="statusText">Initializing...</span></div>
+        <div class="header-title">
+          <h1>Spectrum Mapper</h1>
+          <p>RF signal strength distribution</p>
+        </div>
+
+        <!-- Readouts. The connection state is a word, not just a coloured dot,
+             so it survives a colour-blind reader and a monochrome display. -->
+        <div class="header-meta">
+          <span
+            class="status"
+            id="statusPill"
+            data-state="connecting"
+            role="status"
+            aria-live="polite"
+          >
+            <span id="statusText">Connecting</span>
+          </span>
+
+          <span
+            class="mode-badge"
+            id="modeBadge"
+            data-mode="model"
+            title="Which grid is painted. Press M to switch."
+          >
+            model
+          </span>
+
+          <span
+            class="fps-badge"
+            id="fpsBadge"
+            title="Frames received per second. The server sends one every UPDATE_RATE ms, 500 by default, so 2 is normal."
+            aria-label="Frames per second received from the server"
+          >
+            &mdash; fps
+          </span>
+
+          <!-- Icon-only, so the label has to live in aria-label. The glyph is a
+               text character rather than an image, which keeps the page free of
+               emoji and of any second request. -->
+          <button
+            id="themeToggle"
+            class="icon-btn"
+            type="button"
+            aria-label="Switch to light theme"
+            title="Switch theme"
+          >
+            <!-- Inline SVG rather than a Unicode glyph. U+263D measured 7.2px
+                 wide in a 28px button and read as a closing bracket, and its
+                 shape depends on whichever font happens to cover it. An inline
+                 path uses currentColor, needs no second request, and is not an
+                 emoji. -->
+            <svg
+              id="themeGlyph"
+              aria-hidden="true"
+              focusable="false"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.25"
+              stroke-linecap="round"
+            >
+              <!-- Filled by theme.js: a crescent when dark, a sun when light. -->
+              <path id="themeGlyphPath" d="" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <!-- Public-demo notice. Revealed by dashboard.js only when the server
@@ -85,11 +153,16 @@
               <!-- Hidden in demo mode: ingest answers 403 there, so offering the
                    control invites a click that can only fail. -->
               <span id="csvImportControl">
+                <!-- Driven by the button below, never reached by Tab: it is a
+                     hidden file dialog, and an unnamed one in the tab order is a
+                     dead stop for a keyboard user. -->
                 <input
                   type="file"
                   id="csvPicker"
                   accept=".csv,text/csv"
                   hidden
+                  tabindex="-1"
+                  aria-hidden="true"
                 />
                 <button id="importCsv" type="button">
                   Import readings CSV

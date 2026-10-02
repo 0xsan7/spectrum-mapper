@@ -111,7 +111,7 @@ class HeatmapRenderer {
     this.ctx.save();
 
     // The error line, with the distance in metres on it.
-    this.ctx.strokeStyle = 'rgba(255, 212, 0, 0.9)';
+    this.ctx.strokeStyle = 'rgba(243, 182, 31, 0.9)';
     this.ctx.lineWidth = 1.5;
     this.ctx.setLineDash([5, 4]);
     this.ctx.beginPath();
@@ -123,7 +123,7 @@ class HeatmapRenderer {
     // The mirror-image candidate, when only two receivers were usable. Drawn
     // hollow so it reads as a possibility, not a result.
     if (estimate.ambiguous && estimate.alternative) {
-      this.ctx.strokeStyle = 'rgba(255, 212, 0, 0.45)';
+      this.ctx.strokeStyle = 'rgba(243, 182, 31, 0.45)';
       this.ctx.lineWidth = 1.5;
       this.ctx.beginPath();
       this.ctx.arc(
@@ -137,7 +137,7 @@ class HeatmapRenderer {
     }
 
     // The estimate itself: a crosshair with a gap in the middle.
-    this.ctx.strokeStyle = '#ffd400';
+    this.ctx.strokeStyle = '#f3b61f';
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
     this.ctx.moveTo(ex - 12, ey);
@@ -156,15 +156,15 @@ class HeatmapRenderer {
       ey - 18
     );
 
-    const label = `${tracking.errorMetres.toFixed(2)} m error`;
-    this.ctx.font = '11px ui-monospace, monospace';
-    const width = this.ctx.measureText(label).width;
-    const midX = (tx + ex) / 2;
-    const midY = (ty + ey) / 2;
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    this.ctx.fillRect(midX - width / 2 - 4, midY - 9, width + 8, 14);
-    this.ctx.fillStyle = '#ffd400';
-    this.ctx.fillText(label, midX, midY + 2);
+    // The error distance rides the midpoint of the line. This used to be a
+    // second hand-rolled label - its own font, its own translucent pill, its own
+    // colour - which is how the map ended up with two shades of amber and two
+    // label styles. drawLabel now owns all of it.
+    this.drawLabel(
+      `${tracking.errorMetres.toFixed(2)} m error`,
+      (tx + ex) / 2,
+      (ty + ey) / 2 + 2
+    );
 
     this.ctx.restore();
   }
@@ -319,7 +319,11 @@ class HeatmapRenderer {
       const py = source.y * sy;
       this.ctx.beginPath();
       this.ctx.arc(px, py, 9, 0, Math.PI * 2);
-      this.ctx.fillStyle = source.pinned ? '#ffd400' : '#ff2fd0';
+      // Pinned is amber, moving is magenta. That difference is state, not
+      // decoration. Both are the --warning / --magenta tokens from
+      // style.css; the canvas previously used near-misses (#ffd400, #ff2fd0)
+      // that did not match the chrome they sit beside.
+      this.ctx.fillStyle = source.pinned ? '#f3b61f' : '#ff2bd6';
       this.ctx.fill();
       this.ctx.strokeStyle = '#fff';
       this.ctx.lineWidth = 2;
@@ -330,21 +334,36 @@ class HeatmapRenderer {
     data.receivers.forEach((receiver) => {
       const px = receiver.x * sx;
       const py = receiver.y * sy;
-      this.ctx.strokeStyle = '#00ff88';
+      this.ctx.strokeStyle = '#39ff88';
       this.ctx.lineWidth = 2;
       this.ctx.strokeRect(px - 7, py - 7, 14, 14);
       this.drawLabel(receiver.id, px, py - 12);
     });
   }
 
+  /**
+   * A marker label: dark pill, light text, monospace.
+   *
+   * The pill is opaque rather than 65% black. A translucent one picks up the
+   * heatmap underneath, so over a hot red cell the label went muddy and the
+   * text on it lost contrast - measured on the rendered pixels, not assumed.
+   * Monospace because these are coordinates: proportional digits make a
+   * decimal point hard to find at 11px, which is how "2.11 m error" gets read
+   * as "21 n error".
+   */
   drawLabel(text, px, py) {
     this.ctx.save();
-    this.ctx.font = '11px system-ui, sans-serif';
+    this.ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
     this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'alphabetic';
     const width = this.ctx.measureText(text).width;
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    this.ctx.fillRect(px - width / 2 - 4, py - 10, width + 8, 14);
-    this.ctx.fillStyle = '#fff';
+    this.ctx.fillStyle = 'rgba(10, 14, 20, 0.92)';
+    this.ctx.fillRect(px - width / 2 - 4, py - 10, width + 8, 15);
+    // A hairline keeps the pill readable where it crosses a bright cell.
+    this.ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(px - width / 2 - 4.5, py - 10.5, width + 9, 16);
+    this.ctx.fillStyle = '#dce6f0';
     this.ctx.fillText(text, px, py);
     this.ctx.restore();
   }

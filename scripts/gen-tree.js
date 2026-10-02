@@ -40,6 +40,7 @@ const DESCRIPTIONS = {
   'public/dashboard.js': 'single app instance, frame dispatch',
   'public/heatmap.js': 'canvas renderer, walls, trails, markers',
   'public/colors.js': 'RSSI → RGB ramp',
+  'public/theme.js': 'light/dark theme, remembered',
   'public/legend.js': 'legend built from the same ramp',
   'public/chart.js': 'RSSI and error time series',
   'public/controls.js': 'sliders, transport, wall controls',
