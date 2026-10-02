@@ -1,6 +1,6 @@
 {
   "name": "spectrum-mapper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Interactive 2.4 GHz RF coverage simulator with RSSI trilateration. Log-distance path loss, wall attenuation and a live heatmap streamed over WebSocket.",
   "keywords": [
     "rssi",

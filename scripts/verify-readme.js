@@ -1664,3 +1664,132 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log('all README claims check out');
+/*
+ * The changelog's 1.2.0 entry, checked against the code it describes.
+ *
+ * A release note that drifts from the code is worse than none, because it is
+ * believed. These read the constants rather than restating them, so renaming
+ * MAX_POINTS or changing the neighbour count fails here.
+ */
+{
+  const changelog = read('CHANGELOG.md');
+  const i120 = changelog.indexOf('## [1.2.0]');
+  check(
+    'CHANGELOG.md has a 1.2.0 entry',
+    i120 > 0,
+    'the version being released must be documented'
+  );
+  const entry =
+    i120 > 0 ? changelog.slice(i120, changelog.indexOf('## [1.1.0]')) : '';
+  const norm = (t) => t.replace(/\s+/g, ' ');
+  // The formatter reflows the prose, so "5000\n  readings" is the same
+  // phrase as "5000 readings". Compare against the flattened entry.
+  const normEntry = norm(entry);
+  check('CHANGELOG 1.2.0 section found', entry.length > 0);
+
+  for (const h of ['### Added', '### Changed', '### Fixed']) {
+    check(
+      `CHANGELOG 1.2.0 has a ${h.replace('### ', '')} heading`,
+      entry.includes(h)
+    );
+  }
+
+  const pkgVersion = JSON.parse(read('package.json')).version;
+  const lockVersion = JSON.parse(read('package-lock.json')).version;
+  check(
+    'package.json is the version being released',
+    pkgVersion === '1.2.0',
+    pkgVersion
+  );
+  check(
+    'package-lock.json matches package.json',
+    lockVersion === pkgVersion,
+    `lock says ${lockVersion}, package says ${pkgVersion}`
+  );
+
+  // The numbers, read from the source of truth.
+  const readings = read('src/readings.js');
+  const interp = read('src/interpolate.js');
+  const cfg = read('src/config/constants.js');
+  const claim = (label, cond) =>
+    check(`CHANGELOG 1.2.0 matches the code: ${label}`, cond);
+
+  const cap = Number(/MAX_POINTS:\s*(\d+)/.exec(readings)?.[1]);
+  const perReq = Number(/MAX_ITEMS:\s*(\d+)/.exec(readings)?.[1]);
+  const bodyKb = Number(
+    /MAX_BODY_BYTES:\s*(\d+)\s*\*\s*1024/.exec(readings)?.[1]
+  );
+  const power = Number(/POWER:\s*(\d+)/.exec(interp)?.[1]);
+  const nearest = Number(/NEAREST:\s*(\d+)/.exec(interp)?.[1]);
+  const maxDist = Number(/MAX_DISTANCE:\s*([\d.]+)/.exec(interp)?.[1]);
+
+  // Interpolated, not written out: a hard-coded 5000 here would let the cap
+  // change in readings.js without failing this check, which is exactly what the
+  // neighbouring assertions do not do.
+  claim(`the ${cap}-reading store cap`, normEntry.includes(`${cap} readings`));
+  claim(
+    `the ${perReq}-per-request limit`,
+    normEntry.includes(`${perReq} readings per request`)
+  );
+  claim(
+    `the ${bodyKb} KB body limit`,
+    normEntry.includes(`${bodyKb} KB per body`)
+  );
+  claim(`IDW power ${power}`, normEntry.includes(`power ${power}`));
+  claim(
+    `the ${nearest} nearest samples`,
+    normEntry.includes(`${nearest} nearest samples`)
+  );
+  claim(
+    `the ${maxDist} m no-data radius`,
+    normEntry.includes(`${maxDist} m from every sample`)
+  );
+
+  const sampleRows =
+    read('docs/examples/sample-readings.csv').trim().split('\n').length - 1;
+  claim(
+    `the ${sampleRows}-point sample survey`,
+    normEntry.includes(`${sampleRows}-point survey`)
+  );
+
+  // Features named in the entry must exist as routes / config.
+  for (const [label, needle, hay] of [
+    ['POST /api/readings', "'/api/readings'", read('src/server.js')],
+    [
+      'POST /api/import/readings.csv',
+      "'/api/import/readings.csv'",
+      read('src/server.js'),
+    ],
+    [
+      'GET /api/export/measured.csv',
+      "'/api/export/measured.csv'",
+      read('src/server.js'),
+    ],
+    ['GET /healthz', "'/healthz'", read('src/server.js')],
+    ['DEMO_MODE', 'DEMO_MODE', cfg],
+    ['ALLOWED_ORIGINS', 'ALLOWED_ORIGINS', cfg],
+    ['READINGS_TOKEN', 'READINGS_TOKEN', cfg],
+  ]) {
+    claim(`${label} exists`, hay.includes(needle));
+  }
+
+  // The honesty requirement, pinned in the changelog itself.
+  claim(
+    'it says the sample CSV is model output, not field data',
+    /model output with small offsets[^.]*not field measurements/i.test(
+      normEntry
+    )
+  );
+  // The two bugs the release notes must name, because both shipped broken.
+  // Backticks instead of \s+: the phrase is split across lines by the
+  // formatter, and a literal \s+ is a whitespace class that also matches the
+  // newline but not the indentation prettier inserts between the words.
+  claim(
+    'it reports the WebSocket Origin check that enforced nothing',
+    normEntry.includes('check enforced nothing')
+  );
+  claim(
+    'it reports the dragged transmitter that survived the idle reset',
+    /dragged transmitter survived the idle reset/i.test(normEntry)
+  );
+}
