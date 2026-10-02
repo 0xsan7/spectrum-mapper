@@ -618,22 +618,52 @@ for (const e of endpoints) {
       )
     );
 
-    // The instruction was no live-demo URL anywhere. This repository documents
-    // how to deploy your own copy and points at nobody else's.
-    const allowedHosts =
-      /^(www\.|dashboard\.)?(render\.com|localhost|127\.0\.0\.1|github\.com|docs\.github\.com|your-service)$/;
-    const hostnames = [
+    // Which links are allowed, and why it is an exact-URL allowlist.
+    //
+    // This used to forbid every host except Render and GitHub. It now permits
+    // exactly one deployment URL, and only that one - not "anything on
+    // onrender.com". A host-level allowlist would wave through a typo'd or
+    // somebody else's service, which is the failure this check exists to catch.
+    const DEMO_URL = 'https://spectrum-mapper-demo.onrender.com';
+    const allowedExactUrls = new Set([DEMO_URL.toLowerCase()]);
+
+    const urlsIn = (text) => [
       ...new Set(
-        [...deploy.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) =>
-          m[1].toLowerCase()
+        [...text.matchAll(/https?:\/\/[^\s)\]>"'`]+/gi)].map((m) =>
+          m[0].replace(/[.,;:]$/, '').toLowerCase()
         )
       ),
-    ].filter((h) => !allowedHosts.test(h));
+    ];
+
+    // The hosts this project legitimately links: badge images, Node, GitHub,
+    // Render, and localhost in the curl examples. Anything else is a mistake.
+    const allowedHosts =
+      /^(www\.|dashboard\.)?(render\.com|img\.shields\.io|nodejs\.org|localhost(:\d+)?|127\.0\.0\.1(:\d+)?|github\.com|docs\.github\.com|your-service)$/;
+    const stray = urlsIn(deploy).filter((u) => {
+      if (allowedExactUrls.has(u)) return false;
+      const host = u.replace(/^https?:\/\//, '').split('/')[0];
+      return !allowedHosts.test(host);
+    });
     check(
-      'docs/deploy.md links nowhere but Render and the repository',
-      hostnames.length === 0,
-      `unexpected hosts: ${hostnames.join(', ')}`
+      'docs/deploy.md links only to Render, the repository, or the one demo URL',
+      stray.length === 0,
+      `unexpected URLs: ${stray.join(', ')}`
     );
+
+    // The same rule everywhere, so a stray demo URL cannot be introduced into
+    // another file to dodge the deploy.md check.
+    for (const f of ['README.md', 'package.json', 'render.yaml']) {
+      const strayElsewhere = urlsIn(read(f)).filter((u) => {
+        if (allowedExactUrls.has(u)) return false;
+        const host = u.replace(/^https?:\/\//, '').split('/')[0];
+        return !allowedHosts.test(host);
+      });
+      check(
+        `${f} links only to Render, the repository, or the one demo URL`,
+        strayElsewhere.length === 0,
+        `unexpected URLs: ${strayElsewhere.join(', ')}`
+      );
+    }
 
     // The blueprint values it documents must be the ones in the blueprint, or
     // the page is describing a deploy that does not happen.
