@@ -8,6 +8,47 @@
     <link rel="stylesheet" href="style.css" />
     <!-- Synchronous, and first: it applies the stored theme before first paint.
          See public/theme.js for why a deferred script here would flash. -->
+    <!-- The shortcut sheet. Hidden until `?`, so it costs nothing on load and
+         is not a tab stop for anyone not looking for it. -->
+    <div
+      class="sheet-backdrop"
+      id="shortcutSheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shortcutSheetTitle"
+      hidden
+    >
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2 id="shortcutSheetTitle">Keyboard shortcuts</h2>
+          <button
+            type="button"
+            class="sheet-close"
+            data-shortcut-close
+            aria-label="Close the shortcut list"
+          >
+            Close
+          </button>
+        </div>
+        <div class="sheet-body" data-shortcut-list></div>
+        <p class="hint">Press <kbd>?</kbd> to close, or <kbd>Esc</kbd>.</p>
+      </div>
+    </div>
+
+    <!-- Shown over the map when the socket drops. The map keeps its last frame
+         rather than going blank, so the failure is visible without the data
+         being misread as a change. -->
+    <div
+      class="reconnect"
+      id="reconnectNotice"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span class="reconnect-dot" aria-hidden="true"></span>
+      <span class="reconnect-text">Reconnecting&hellip;</span>
+    </div>
+
     <script src="theme.js"></script>
   </head>
   <body>
@@ -131,120 +172,216 @@
         </div>
 
         <aside class="info-section">
-          <section class="panel">
-            <h3>Model</h3>
-            <div id="sliders" class="sliders"></div>
-          </section>
+          <div class="tabs" role="tablist" aria-label="Sidebar sections">
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-model"
+              aria-controls="panel-model"
+              aria-selected="true"
+              tabindex="0"
+            >
+              Model
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-devices"
+              aria-controls="panel-devices"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Devices
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-walls"
+              aria-controls="panel-walls"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Walls
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-measured"
+              aria-controls="panel-measured"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Measured
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-export"
+              aria-controls="panel-export"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Export
+            </button>
+          </div>
 
-          <section class="panel">
-            <h3>Transmitters</h3>
-            <div id="sourcesList"></div>
-          </section>
+          <div
+            class="tabpanel"
+            role="tabpanel"
+            id="panel-model"
+            aria-labelledby="tab-model"
+            tabindex="0"
+          >
+            <section class="panel">
+              <h3>Model</h3>
+              <div id="sliders" class="sliders"></div>
+            </section>
+            <section class="panel">
+              <h3>
+                RSSI over time
+                <span class="chart-legend">
+                  <i class="swatch-avg"></i>avg RSSI
+                  <i class="swatch-err"></i>error
+                </span>
+              </h3>
+              <canvas id="rssiChart" class="rssi-chart"></canvas>
+              <div class="hint" id="historyHint"></div>
+            </section>
+            <section class="panel">
+              <h3>Statistics</h3>
+              <div class="stats" id="statsPanel"></div>
+            </section>
+            <section class="panel">
+              <h3>Coverage</h3>
+              <div id="spectrumPanel"></div>
+            </section>
+            <section class="panel">
+              <h3>Controls</h3>
+              <div class="button-row">
+                <button id="pauseBtn">Pause</button>
+                <button id="resetBtn">Reset</button>
+              </div>
+              <p class="hint">
+                Space: pause. R: reset. W: wall mode. C: clear walls.
+              </p>
+            </section>
+          </div>
 
-          <section class="panel">
-            <h3>Receivers</h3>
-            <div id="receiversList"></div>
-          </section>
+          <div
+            class="tabpanel"
+            role="tabpanel"
+            id="panel-devices"
+            aria-labelledby="tab-devices"
+            tabindex="0"
+            hidden
+          >
+            <section class="panel">
+              <h3>Transmitters</h3>
+              <div id="sourcesList"></div>
+            </section>
+            <section class="panel">
+              <h3>Receivers</h3>
+              <div id="receiversList"></div>
+            </section>
+            <section class="panel">
+              <h3>Position estimate</h3>
+              <div id="trackingPanel"></div>
+            </section>
+          </div>
 
-          <section class="panel">
-            <h3>Walls</h3>
-            <p class="hint">
-              Draw: drag on the map. Each crossing costs attenuation.
-            </p>
-            <div class="wall-controls">
-              <label for="wallAttenuation">Attenuation</label>
-              <input
-                type="range"
-                id="wallAttenuation"
-                min="0"
-                max="40"
-                step="1"
-                value="12"
-              />
-              <output id="wallAttenuationValue">12 dB</output>
-            </div>
-            <div id="wallsList" class="walls-list"></div>
-          </section>
+          <div
+            class="tabpanel"
+            role="tabpanel"
+            id="panel-walls"
+            aria-labelledby="tab-walls"
+            tabindex="0"
+            hidden
+          >
+            <section class="panel">
+              <h3>Walls</h3>
+              <p class="hint">
+                Draw: drag on the map. Each crossing costs attenuation.
+              </p>
+              <div class="wall-controls">
+                <label for="wallAttenuation">Attenuation</label>
+                <input
+                  type="range"
+                  id="wallAttenuation"
+                  min="0"
+                  max="40"
+                  step="1"
+                  value="12"
+                />
+                <output id="wallAttenuationValue">12 dB</output>
+              </div>
+              <div id="wallsList" class="walls-list"></div>
+            </section>
+          </div>
 
-          <section class="panel">
-            <!-- The heading is relabelled in demo mode, where the readings
+          <div
+            class="tabpanel"
+            role="tabpanel"
+            id="panel-measured"
+            aria-labelledby="tab-measured"
+            tabindex="0"
+            hidden
+          >
+            <section class="panel">
+              <!-- The heading is relabelled in demo mode, where the readings
                  shown are the bundled sample survey rather than anyone's. -->
-            <h3 id="measuredHeading">Measured</h3>
-            <div id="measuredPanel"></div>
-            <div class="export-buttons">
-              <!-- Hidden in demo mode: ingest answers 403 there, so offering the
+              <h3 id="measuredHeading">Measured</h3>
+              <div id="measuredPanel"></div>
+              <div class="export-buttons">
+                <!-- Hidden in demo mode: ingest answers 403 there, so offering the
                    control invites a click that can only fail. -->
-              <span id="csvImportControl">
-                <!-- Driven by the button below, never reached by Tab: it is a
+                <span id="csvImportControl">
+                  <!-- Driven by the button below, never reached by Tab: it is a
                      hidden file dialog, and an unnamed one in the tab order is a
                      dead stop for a keyboard user. -->
-                <input
-                  type="file"
-                  id="csvPicker"
-                  accept=".csv,text/csv"
-                  hidden
-                  tabindex="-1"
-                  aria-hidden="true"
-                />
-                <button id="importCsv" type="button">
-                  Import readings CSV
-                </button>
-              </span>
-              <button id="clearReadings" type="button">Clear readings</button>
-            </div>
-          </section>
+                  <input
+                    type="file"
+                    id="csvPicker"
+                    accept=".csv,text/csv"
+                    hidden
+                    tabindex="-1"
+                    aria-hidden="true"
+                  />
+                  <button id="importCsv" type="button">
+                    Import readings CSV
+                  </button>
+                </span>
+                <button id="clearReadings" type="button">Clear readings</button>
+              </div>
+            </section>
+          </div>
 
-          <section class="panel">
-            <h3>
-              RSSI over time
-              <span class="chart-legend">
-                <i class="swatch-avg"></i>avg RSSI
-                <i class="swatch-err"></i>error
-              </span>
-            </h3>
-            <canvas id="rssiChart" class="rssi-chart"></canvas>
-            <div class="hint" id="historyHint"></div>
-          </section>
-
-          <section class="panel">
-            <h3>Export</h3>
-            <div class="export-buttons">
-              <button id="exportPng" type="button">PNG</button>
-              <button id="exportSeries" type="button">Time series CSV</button>
-              <button id="exportHeatmap" type="button">Heatmap CSV</button>
-              <button id="exportReadings" type="button">Readings CSV</button>
-              <button id="exportFrame" type="button">Full JSON</button>
-            </div>
-            <div class="hint">
-              The CSVs are served by the API, so they work with curl too.
-            </div>
-          </section>
-
-          <section class="panel">
-            <h3>Position estimate</h3>
-            <div id="trackingPanel"></div>
-          </section>
-
-          <section class="panel">
-            <h3>Statistics</h3>
-            <div class="stats" id="statsPanel"></div>
-          </section>
-
-          <section class="panel">
-            <h3>Coverage</h3>
-            <div id="spectrumPanel"></div>
-          </section>
-
-          <section class="panel">
-            <h3>Controls</h3>
-            <div class="button-row">
-              <button id="pauseBtn">Pause</button>
-              <button id="resetBtn">Reset</button>
-            </div>
-            <p class="hint">
-              Space: pause. R: reset. W: wall mode. C: clear walls.
-            </p>
-          </section>
+          <div
+            class="tabpanel"
+            role="tabpanel"
+            id="panel-export"
+            aria-labelledby="tab-export"
+            tabindex="0"
+            hidden
+          >
+            <section class="panel">
+              <h3>Export</h3>
+              <div class="export-buttons">
+                <button id="exportPng" type="button">PNG</button>
+                <button id="exportSeries" type="button">Time series CSV</button>
+                <button id="exportHeatmap" type="button">Heatmap CSV</button>
+                <button id="exportReadings" type="button">Readings CSV</button>
+                <button id="exportFrame" type="button">Full JSON</button>
+              </div>
+              <div class="hint">
+                The CSVs are served by the API, so they work with curl too.
+              </div>
+            </section>
+          </div>
         </aside>
       </main>
     </div>
@@ -255,6 +392,8 @@
     <script src="colors.js"></script>
     <script src="websocket.js"></script>
     <script src="legend.js"></script>
+    <script src="tabs.js"></script>
+    <script src="shortcut-sheet.js"></script>
     <script src="heatmap.js"></script>
     <script src="spectrum-analysis.js"></script>
     <script src="interaction.js"></script>

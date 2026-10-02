@@ -17,6 +17,8 @@ const BROWSER_CONSUMERS = {
   WebSocketClient: ['public/dashboard.js'], // websocket.js
   HeatmapRenderer: ['public/dashboard.js'], // heatmap.js
   LegendBar: ['public/dashboard.js'], // legend.js
+  SidebarTabs: ['public/dashboard.js'], // tabs.js
+  ShortcutSheet: ['public/dashboard.js', 'public/shortcuts.js'], // shortcut-sheet.js
   ColorMapper: ['public/heatmap.js', 'public/legend.js', 'public/dashboard.js'], // colors.js
   CONTOUR_LEVELS: ['public/dashboard.js'], // heatmap.js
   Interaction: ['public/dashboard.js'], // interaction.js

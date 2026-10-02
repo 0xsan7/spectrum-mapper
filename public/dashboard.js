@@ -19,6 +19,19 @@ class Dashboard {
     // Set once: legend.render() paints the ticks from here, so no caller has to
     // remember to. See the note in LegendBar.render.
     this.legend.levels = CONTOUR_LEVELS;
+
+    // The sidebar's five tabs. onShow re-draws the RSSI chart, which sizes
+    // itself from its container and gets no width while its panel is hidden.
+    // The shortcut sheet, generated from the same table the keys are bound to.
+    const sheetEl = document.getElementById('shortcutSheet');
+    if (sheetEl) this.sheet = new ShortcutSheet(sheetEl);
+
+    const tablist = document.querySelector('.tabs[role="tablist"]');
+    if (tablist) {
+      this.tabs = new SidebarTabs(tablist, {
+        onShow: () => this.chart.draw(),
+      });
+    }
     this.currentData = null;
     this.isPaused = false;
     this.frameRequested = false;
@@ -87,6 +100,32 @@ class Dashboard {
       'reconnect limit reached',
     ];
     this.statusPill.dataset.state = known.includes(key) ? key : 'connecting';
+
+    /* A reconnecting notice over the map.
+     *
+     * The pill in the header already says the socket dropped, but it is small
+     * and easy to read past once you are looking at the map. The map itself
+     * keeps its last frame rather than blanking, so a stale field looks exactly
+     * like a live one - which is the dangerous case. The overlay says so
+     * outright, and is only shown while the socket is actually down.
+     *
+     * role=status with aria-live=polite, so a screen reader announces the loss
+     * without interrupting whatever the user is doing.
+     */
+    if (!this.reconnectEl)
+      this.reconnectEl = document.getElementById('reconnectNotice');
+    if (this.reconnectEl) {
+      const down = key !== 'connected';
+      if (down) this.reconnectEl.removeAttribute('hidden');
+      else this.reconnectEl.setAttribute('hidden', '');
+      const text = this.reconnectEl.querySelector('.reconnect-text');
+      if (text) {
+        text.textContent =
+          key === 'reconnect limit reached'
+            ? 'Connection lost. Reload to try again.'
+            : 'Reconnecting\u2026';
+      }
+    }
   }
 
   /** Frames per second over a one-second window, refreshed on each frame. */
@@ -320,12 +359,14 @@ class Dashboard {
       // Outside a demo the hint tells you how to add readings. In a demo they
       // cannot be added and the survey is preloaded, so say that instead of
       // offering a control that is not there.
-      const hint = this.demoMode
-        ? '<div class="hint">A sample survey loads with the demo.</div>'
-        : '<div class="hint">Import a CSV or POST to /api/readings, then press M.</div>';
+      const hintText = this.demoMode
+        ? 'A sample survey loads with the demo.'
+        : 'Import a CSV or POST to /api/readings, then press M.';
       panel.innerHTML =
-        `<div class="stat-row"><span>Readings</span><span>none</span></div>` +
-        hint;
+        '<div class="empty">' +
+        '<span class="empty-title">No measurements yet</span>' +
+        `<span class="empty-hint">${hintText}</span>` +
+        '</div>';
       return;
     }
     const gaps = measured.grid.filter((c) => c.hasData === false).length;

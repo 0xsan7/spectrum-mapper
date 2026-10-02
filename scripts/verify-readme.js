@@ -981,31 +981,34 @@ if (envTable) {
  * documented shortcut that silently does nothing is the exact failure worth
  * catching here.
  *
- * The implementation side looks for the key inside its own `case` arm, so an
- * unrelated mention of "r" somewhere in the file cannot stand in for a
- * handler. Comments are stripped first, or a commented-out arm counts.
+ * The bindings live in one table in shortcut-sheet.js, which is also what
+ * renders the on-screen sheet. This used to grep each key's own `case` arm in
+ * shortcuts.js, which stopped matching when the dispatch became table-driven -
+ * so it would have gone on reporting five missing shortcuts while they all
+ * worked. It now reads the table, which is where the behaviour actually is.
  */
 const shortcuts = read('public/shortcuts.js');
-const shortcutSource = shortcuts
+const sheetSource = read('public/shortcut-sheet.js')
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/\/\/.*$/gm, '');
 
+/* Each binding's block, found by splitting the frozen table on `keys:` rather
+   than by matching a closing brace at a fixed indentation - prettier moves
+   that around, and a check that breaks when the file is reformatted is a check
+   nobody trusts. */
+const bindingBlocks = sheetSource.split(/keys:\s*\[/).slice(1);
+
 for (const [key, name, action] of [
-  [' ', 'Space', 'pause'],
-  ['r', 'R', 'reset'],
-  ['w', 'W', 'wall'],
-  ['m', 'M', 'cycleMapMode'],
-  ['k', 'K', 'cycleRamp'],
+  ['Space', 'Space', 'pauseBtn'],
+  ['R', 'R', 'resetBtn'],
+  ['W', 'W', "d.interaction.mode === 'wall' ? 'move' : 'wall'"],
+  ['M', 'M', 'cycleMapMode'],
+  ['K', 'K', 'cycleRamp'],
+  ['C', 'C', 'clearWalls'],
+  ['?', '?', 'sheet.toggle'],
 ]) {
-  const arm = shortcutSource.match(
-    new RegExp(
-      `case '${key === ' ' ? ' ' : key}'\\s*:([\\s\\S]{0,400}?)\\n\\s*break;`
-    )
-  );
-  const implemented = Boolean(arm) && arm[1].includes(action);
-  // Required in the Controls table specifically. `readme.includes('K`')` was
-  // satisfied by a passing mention in the feature list, which is exactly the
-  // failure this is meant to catch: a shortcut nobody can find.
+  const block = bindingBlocks.find((b) => b.slice(0, 60).includes(`'${key}'`));
+  const implemented = Boolean(block) && block.slice(0, 420).includes(action);
   const controls = (readme.split('### Controls')[1] || '').split('###')[0];
   check(`${name} is implemented`, implemented);
   check(
@@ -1013,6 +1016,22 @@ for (const [key, name, action] of [
     controls.includes(`\`${name}\``)
   );
 }
+
+/* The sheet and the key handling must not drift apart. A help list that can
+   disagree with the bindings is worse than none, because it is confidently
+   wrong - so the two are generated from one table and this checks the wiring
+   holds. */
+check(
+  'the on-screen sheet is generated from the same table the keys are bound to',
+  /const SHORTCUT_BINDINGS = Object\.freeze\(/.test(sheetSource) &&
+    /static BINDINGS = SHORTCUT_BINDINGS/.test(sheetSource)
+);
+check(
+  'shortcuts.js dispatches through the table rather than its own switch',
+  /ShortcutSheet\.BINDINGS\.find/.test(
+    shortcuts.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  )
+);
 
 /* ---- the colour ramp is a real, documented choice ----
  *

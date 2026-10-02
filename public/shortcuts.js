@@ -1,18 +1,31 @@
 /**
- * Keyboard shortcuts. Every one of these is implemented; the old README
- * advertised a `?` help key that did not exist.
+ * Keyboard shortcuts. Every one of these is implemented.
  *
- *   Space  pause / resume
- *   R      reset the scene
- *   W      toggle wall-drawing mode
- *   C      clear all walls
- *   M      cycle the map: model / measured
- *   K      cycle the colour ramp: inferno / cividis / classic
+ * The bindings themselves live in ShortcutSheet.BINDINGS, which is also what
+ * generates the on-screen sheet behind `?`. Binding them from one table is the
+ * only way a help list cannot drift into confidently advertising a key that
+ * does something else.
+ *
+ *   Space  pause / resume          M  cycle the map: model / measured
+ *   R      reset the scene         K  cycle the colour ramp
+ *   W      toggle wall mode        C  clear all walls
+ *   ?      open or close the sheet
  */
 class KeyboardShortcuts {
+  /** Which binding answers which physical key. Shift is stripped by the caller. */
+  static KEY_TO_BINDING = {
+    ' ': 'Space',
+    r: 'R',
+    w: 'W',
+    m: 'M',
+    k: 'K',
+    c: 'C',
+    '?': '?',
+  };
+
   static init() {
     document.addEventListener('keydown', (event) => {
-      // Never hijack typing in an input.
+      // Never hijack typing in an input, or a key press inside the sheet.
       const tag = event.target.tagName;
       if (
         tag === 'INPUT' ||
@@ -26,40 +39,26 @@ class KeyboardShortcuts {
       const dashboard = window.dashboard;
       if (!dashboard) return;
 
-      switch (event.key.toLowerCase()) {
-        case ' ':
-          event.preventDefault();
-          document.getElementById('pauseBtn').click();
-          break;
-        case 'r':
-          document.getElementById('resetBtn').click();
-          break;
-        case 'w':
-          dashboard.interaction.setMode(
-            dashboard.interaction.mode === 'wall' ? 'move' : 'wall'
-          );
-          dashboard.setStatusHint();
-          break;
-        case 'm':
-          // Cycle the map layer. Leaving wall-drawing mode at the same time is
-          // deliberate: M is the escape hatch back to looking at the map, and a
-          // cursor left in crosshair makes that surprising.
-          dashboard.interaction.setMode('move');
-          dashboard.cycleMapMode();
-          dashboard.setStatusHint();
-          break;
-        case 'k':
-          // The colour ramp, not R: R is already reset, and a shortcut that
-          // does something destructive is a bad neighbour to one that only
-          // changes how the map looks.
-          dashboard.cycleRamp();
-          break;
-        case 'c':
-          dashboard.send({ type: 'clearWalls' });
-          break;
-        default:
-          break;
+      // Escape closes the sheet from anywhere inside it.
+      if (event.key === 'Escape' && dashboard.sheet && dashboard.sheet.open) {
+        event.preventDefault();
+        dashboard.sheet.close();
+        return;
       }
+
+      const key = KeyboardShortcuts.KEY_TO_BINDING[event.key.toLowerCase()];
+      if (!key) return;
+      const binding = ShortcutSheet.BINDINGS.find((b) => b.keys.includes(key));
+      if (!binding) return;
+
+      // Space is the only one that would otherwise scroll the page.
+      if (key === 'Space') event.preventDefault();
+
+      // One path for every binding, including `?`. Handling the sheet key as a
+      // special case here would put its behaviour in two places, and the sheet
+      // would then list a key this file no longer honours.
+      if (binding.available && !binding.available(dashboard)) return;
+      if (binding.run) binding.run(dashboard);
     });
   }
 }

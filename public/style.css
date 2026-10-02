@@ -519,6 +519,68 @@ main {
   overflow-y: auto;
 }
 
+/* ---- sidebar tabs ---------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  border-bottom: var(--border-w) solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+}
+
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  /* Five tabs across 19rem leaves ~61px each, and "Measured" is the longest
+     label: at space-1 inline padding and 0.04em tracking it overflowed by 6px
+     at 1440 and 1366. Measured, not guessed - see the slackPx figure in the
+     Phase 3 geometry harness. */
+  padding: var(--space-2) 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  background: transparent;
+  border: var(--border-w) solid transparent;
+  /* No radius: this is an instrument strip, not a set of cards. The underline
+     is the state indicator, matching the panel headings above it. */
+  border-radius: 0;
+  border-bottom-width: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab:hover {
+  color: var(--text-dim);
+  background: var(--surface-2);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--surface);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tabpanel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .panel {
   background: var(--surface);
   border: var(--border-w) solid var(--border);
@@ -986,4 +1048,160 @@ body.narrow main {
   :focus-visible {
     outline: 2px solid Highlight;
   }
+}
+
+/* ---- the shortcut sheet, behind ? ------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(4, 7, 11, 0.72);
+}
+
+.sheet-backdrop[hidden] {
+  display: none;
+}
+
+.sheet {
+  width: min(28rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.shortcut-row:last-child {
+  border-bottom: 0;
+}
+
+.shortcut-keys {
+  flex: 0 0 6.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent);
+}
+
+.shortcut-label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border-control);
+  border-radius: var(--radius-sm);
+  padding: 0.05rem 0.3rem;
+}
+
+/* ---- the reconnecting notice ------------------------------------------ */
+
+.reconnect {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(10, 14, 20, 0.94);
+  border: var(--border-w) solid var(--warning);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--warning);
+}
+
+.reconnect[hidden] {
+  display: none;
+}
+
+.reconnect-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+  animation: reconnect-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes reconnect-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* A pulsing dot is exactly the kind of motion that has to stop when the reader
+   has asked for less of it. The notice still reads without the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .reconnect-dot {
+    animation: none;
+  }
+}
+
+/* ---- empty states ------------------------------------------------------ */
+
+/* An empty list used to render as bare hint text, so a panel with nothing in
+   it looked like a panel that had failed to load. The dashed rule says "no
+   entries" without borrowing the look of an error. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--border-w) dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.empty-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.empty-hint {
+  color: var(--text-muted);
 }

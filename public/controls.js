@@ -98,7 +98,11 @@ class Controls {
 
     if (walls.length === 0) {
       list.innerHTML =
-        '<div class="hint">No walls. Press W, then drag on the map.</div>';
+        '<div class="empty">' +
+        '<span class="empty-title">No walls</span>' +
+        '<span class="empty-hint">Press <kbd>W</kbd>, then drag on the map. ' +
+        'Each crossing costs attenuation.</span>' +
+        '</div>';
       return;
     }
 

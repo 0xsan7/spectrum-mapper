@@ -90,6 +90,7 @@ cannot drift. Regenerate with `npm run tree`.
     ├── host-default.test.js
     ├── interpolate.test.js
     ├── lattice-index.test.js
+    ├── legend-ticks.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── paint-alpha.test.js
     ├── pathLoss.test.js       # model anchored to reference values

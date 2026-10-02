@@ -111,16 +111,17 @@ docker run --rm -p 3000:3000 spectrum-mapper
 
 ### Controls
 
-| Action                         | How                             |
-| ------------------------------ | ------------------------------- |
-| Move a transmitter or receiver | Drag it                         |
-| Release a pinned transmitter   | Double-click it                 |
-| Draw a wall                    | Press `W`, then drag on the map |
-| Remove all walls               | `Clear walls` in the sidebar    |
-| Pause / resume                 | `Space` or the Pause button     |
-| Reset everything               | `R`                             |
-| Cycle map mode                 | `M`                             |
-| Cycle colour ramp              | `K`                             |
+| Action                         | How                                 |
+| ------------------------------ | ----------------------------------- |
+| Move a transmitter or receiver | Drag it                             |
+| Release a pinned transmitter   | Double-click it                     |
+| Draw a wall                    | Press `W`, then drag on the map     |
+| Remove all walls               | `C` or `Clear walls` in the sidebar |
+| Pause / resume                 | `Space` or the Pause button         |
+| Reset everything               | `R`                                 |
+| Cycle map mode                 | `M`                                 |
+| Cycle colour ramp              | `K`                                 |
+| List every shortcut            | `?`                                 |
 
 ### Configuration
 
@@ -240,6 +241,11 @@ Roughly in the order I expect to do them.
       compare a later walk against it
 - [ ] **Faster grid** — spatial partitioning so resolution can go well past 1 m
       without the frame budget moving
+- [ ] **Cache the interpolation across model-parameter changes** —
+      server-side interpolation re-runs on every model-parameter change
+      (62 ms at 1000 samples), because the memo is keyed on the reading count
+      and any slider move invalidates it. At 1000 samples a slider drag
+      re-runs 62 ms of work per frame, against a 500 ms socket cadence
 - [ ] **Dead-zone detector** — find the areas coverage cannot reach, and suggest
       where to move or add a router to close them
 - [ ] **Recorded demo GIF** — an actual capture of the app, none exists yet
