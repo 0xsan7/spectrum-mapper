@@ -44,6 +44,18 @@ function check(label, ok, detail) {
   }
 }
 
+/**
+ * Report a measured number without asserting on it.
+ *
+ * Separate from `check` on purpose. A measurement that cannot fail is not a
+ * check - it is a log line pretending to be one - and when every check is an
+ * assertion it is easy to forget which is which. Anything printed here is
+ * evidence a human can weigh; anything printed by `check` is load-bearing.
+ */
+function note(label, detail) {
+  console.log(`  note  ${label}${detail ? `  (${detail})` : ''}`);
+}
+
 console.log('README claims vs reality');
 
 /* ---- the screenshot the README shows ----
@@ -962,21 +974,307 @@ if (envTable) {
   }
 }
 
-/* ---- keyboard shortcuts claimed in the controls table ---- */
+/* ---- keyboard shortcuts: implemented AND documented ----
+ *
+ * Both halves are required. The previous form was `implemented || documented`,
+ * which passed whenever the README mentioned a key that no code handled - a
+ * documented shortcut that silently does nothing is the exact failure worth
+ * catching here.
+ *
+ * The implementation side looks for the key inside its own `case` arm, so an
+ * unrelated mention of "r" somewhere in the file cannot stand in for a
+ * handler. Comments are stripped first, or a commented-out arm counts.
+ */
 const shortcuts = read('public/shortcuts.js');
-for (const [key, name] of [
-  [' ', 'Space'],
-  ['r', 'R'],
-  ['w', 'W'],
-  ['m', 'M'],
+const shortcutSource = shortcuts
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\/\/.*$/gm, '');
+
+for (const [key, name, action] of [
+  [' ', 'Space', 'pause'],
+  ['r', 'R', 'reset'],
+  ['w', 'W', 'wall'],
+  ['m', 'M', 'cycleMapMode'],
+  ['k', 'K', 'cycleRamp'],
 ]) {
-  const claimed = readme.includes(`\`${name}\``) || readme.includes('Space');
+  const arm = shortcutSource.match(
+    new RegExp(
+      `case '${key === ' ' ? ' ' : key}'\\s*:([\\s\\S]{0,400}?)\\n\\s*break;`
+    )
+  );
+  const implemented = Boolean(arm) && arm[1].includes(action);
+  // Required in the Controls table specifically. `readme.includes('K`')` was
+  // satisfied by a passing mention in the feature list, which is exactly the
+  // failure this is meant to catch: a shortcut nobody can find.
+  const controls = (readme.split('### Controls')[1] || '').split('###')[0];
+  check(`${name} is implemented`, implemented);
   check(
-    `${name} shortcut is implemented and documented`,
-    shortcuts.toLowerCase().includes(key.toLowerCase().replace(' ', 'space')) ||
-      claimed
+    `${name} is documented in the controls table`,
+    controls.includes(`\`${name}\``)
   );
 }
+
+/* ---- the colour ramp is a real, documented choice ----
+ *
+ * The map, the legend and the badge all have to agree, and the README has to
+ * admit the default is not the old blue-red ramp - otherwise the legend in
+ * docs/screenshot.png contradicts the claim.
+ */
+/**
+ * Strip comments before matching.
+ *
+ * Without this a check that greps for a name is satisfied by a comment
+ * mentioning it - which is how "the theme toggle is wired" was once satisfied
+ * by a commented-out ThemeToggle.wire(), and how the Oklab check below was
+ * satisfied by prose describing the conversion.
+ */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const colorsJs = read('public/colors.js');
+const heatmapJs = read('public/heatmap.js');
+check(
+  'a perceptual ramp is the default, not the old blue-red one',
+  /DEFAULT_RAMP\s*=\s*'inferno'/.test(colorsJs)
+);
+check(
+  'a colour-blind-safe ramp is offered',
+  /cividis/.test(colorsJs) && /designed for deuteranopia/.test(colorsJs)
+);
+const colorsCode = stripComments(colorsJs);
+check(
+  'interpolation happens in Oklab, not sRGB',
+  // Bodies, not names: the file explains the maths in prose, so a name-only
+  // match is satisfied by the comment that introduces it.
+  /static srgbToOklab\(r, g, b\)\s*\{[\s\S]{80,}?Math\.cbrt/.test(colorsCode) &&
+    /static oklabToSrgb\(L, a, bb\)\s*\{[\s\S]{80,}?Math\.pow/.test(colorsCode)
+);
+check(
+  'the colour data carries its licence and provenance',
+  /matplotlib/.test(colorsJs) &&
+    /redistribution with attribution/.test(colorsJs)
+);
+check(
+  'the renderer reads its ramp at paint time, not once at load',
+  /this\.ramp/.test(heatmapJs) && /ColorMapper\.getColor/.test(heatmapJs)
+);
+check(
+  'the legend is generated from the ramp rather than written by hand',
+  read('public/legend.js').includes('ColorMapper.toGradient')
+);
+check(
+  'the README names the ramp default and the alternative',
+  /inferno/i.test(readme) && /cividis/i.test(readme)
+);
+
+/* ---- contours: drawn at the levels the docs state ---- */
+check(
+  'the contour levels are declared once, in heatmap.js',
+  /CONTOUR_LEVELS\s*=\s*\[-50,\s*-70,\s*-85\]/.test(heatmapJs)
+);
+check(
+  'the documented contour levels are the drawn ones',
+  /-50[^\n]*-70[^\n]*-85/.test(read('docs/architecture.md')) ||
+    /-50[^\n]*-70[^\n]*-85/.test(readme)
+);
+// \b matters: `contourSegmentsRemoved` satisfies /function contourSegments/,
+// so renaming the tracer - or deleting it and leaving a suffixed stub - sailed
+// through. Comments stripped so a prose mention cannot stand in for the body.
+const heatmapCode = stripComments(heatmapJs);
+/* ---- contour visibility, computed rather than asserted ----
+ *
+ * The contour line has to survive being drawn on top of the field it describes,
+ * and the field runs from near-black to near-white. A single white stroke does
+ * not: against inferno it scores 14.8:1 at -85 dBm and 3.6:1 at -50, and the
+ * ramp's own top end is 1.05:1 against white. So the line is drawn twice - a
+ * dark casing under a light core - and each tone is checked for contrast against
+ * the *worst* background in the ramp rather than against an average one.
+ */
+const toLin = (v) => {
+  const s = v / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+};
+const relLum = ([r, g, b]) =>
+  0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+const contrast = (a, b) => {
+  const [hi, lo] = [relLum(a), relLum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+/** Pull the control points out of colors.js without executing it. */
+function rampPoints(name) {
+  // Bounded by the points array's own brackets, not by a fixed window.
+  //
+  // The old 900-character slice meant that emptying one ramp's points simply
+  // pulled the *next* ramp's control points into the window, so deleting a ramp
+  // left the check reading a different ramp - and passing. Three mutations
+  // "survived" not because the assertion was weak but because it was being fed
+  // the wrong data.
+  const at = colorsJs.search(new RegExp(`\\b${name}:\\s*\\{`));
+  if (at === -1) return [];
+  const declared = colorsJs.indexOf('points', at);
+  if (declared === -1) return [];
+  const open = colorsJs.indexOf('[', declared);
+  if (open === -1) return [];
+
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < colorsJs.length; i++) {
+    if (colorsJs[i] === '[') depth++;
+    else if (colorsJs[i] === ']') {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close === -1) return [];
+
+  return [
+    ...colorsJs.slice(open, close + 1).matchAll(/\[(\d+),\s*(\d+),\s*(\d+)\]/g),
+  ].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])]);
+}
+
+const LIGHT_STROKE = [255, 255, 255];
+const DARK_CASING = [8, 11, 16];
+for (const ramp of ['inferno', 'cividis', 'classic']) {
+  const points = rampPoints(ramp);
+  check(
+    `${ramp} exposes ramp control points to check against`,
+    points.length >= 3
+  );
+  check(`${ramp}: has ramp colours to reason about`, points.length >= 3);
+
+  // Reported, not asserted - see the note on `note` above.
+  //
+  // An earlier version of this check asserted "for every ramp colour, at least
+  // one of the two tones clears 3:1". That is a tautology: with a white core
+  // and a near-black casing, max(contrast) bottoms out near 4.4:1 for *any*
+  // background, whatever the ramp happens to be. It could not fail, so it
+  // proved nothing - and the mutation audit confirmed it, by surviving a ramp
+  // colour pushed all the way to white.
+  const worst = points.reduce(
+    (min, bg) =>
+      Math.min(
+        min,
+        Math.max(contrast(LIGHT_STROKE, bg), contrast(DARK_CASING, bg))
+      ),
+    Infinity
+  );
+  note(
+    `${ramp}: weakest two-tone contrast anywhere on this ramp`,
+    `${worst.toFixed(2)}:1 over ${points.length} colours`
+  );
+  // A ramp that never leaves the light half cannot be bracketed by a dark
+  // casing; one that never leaves the dark half cannot be bracketed by a light
+  // core. Both halves have to exist for the two-tone stroke to earn its keep.
+  const lums = points.map(relLum);
+  check(
+    `${ramp}: spans both light and dark, so both contour tones have work to do`,
+    Math.min(...lums) < 0.35 && Math.max(...lums) > 0.5,
+    `lightness range ${Math.min(...lums).toFixed(2)}..${Math.max(...lums).toFixed(2)}`
+  );
+}
+
+// The falsifiable core of the claim: the two tones must be far apart from each
+// other. Delete either stroke, or paint both the same colour, and this goes
+// red - which the per-ramp measurements above, being a tautology, could not do.
+/**
+ * The two tones are read out of the renderer, not declared next to the check.
+ *
+ * The first version compared two constants defined in verify-readme itself, so
+ * it measured the verifier rather than the drawing code and could not fail for
+ * any mutation of heatmap.js - which the audit demonstrated.
+ */
+function strokeColourIn(source, rgbaMatch) {
+  const m = source.match(new RegExp(rgbaMatch));
+  // Three capture groups - r, g and b - not one comma-separated run.
+  return m ? [m[1], m[2], m[3]].map((n) => Number(n)) : null;
+}
+// The two greps are the same shape, so each is anchored on what comes *after*
+// it: the casing is followed by the wider lineWidth, the core by the narrow
+// one. Without that they both return the first rgba in the file.
+const actualCasing = strokeColourIn(
+  heatmapCode,
+  'strokeStyle = `rgba\\(\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),[^`]*`;\\s*\\n\\s*this\\.ctx\\.lineWidth = style\\.width \\+'
+);
+const actualCore = strokeColourIn(
+  heatmapCode,
+  'strokeStyle = `rgba\\(\\s*(\\d+),\\s*(\\d+),\\s*(\\d+),[^`]*`;\\s*\\n\\s*this\\.ctx\\.lineWidth = style\\.width;'
+);
+check(
+  'both contour stroke colours are recoverable from the renderer',
+  Array.isArray(actualCasing) && Array.isArray(actualCore)
+);
+if (actualCasing && actualCore) {
+  const apart = contrast(actualCore, actualCasing);
+  check(
+    'the contour tones are far enough apart to bracket any background',
+    apart >= 12,
+    `drawn tones ${apart.toFixed(2)}:1 apart (core rgb(${actualCore.join(',')}) over casing rgb(${actualCasing.join(',')}))`
+  );
+}
+// Tested against heatmapCode, which has its comments stripped - so looking for
+// the phrase "dark casing under a light core" there would be looking for prose
+// that was deliberately removed. The two strokes are what has to be there.
+// The closing backtick comes AFTER the paren in `rgba(8, 11, 16, ${...})`,
+// which is the reverse of the obvious `[^`]*`) spelling.
+const casingStroke =
+  /strokeStyle = `rgba\(8, 11, 16,[^`]*\)`[\s\S]{0,160}?stroke\(\)/;
+const coreStroke =
+  /strokeStyle = `rgba\(255, 255, 255,[^`]*\)`[\s\S]{0,160}?stroke\(\)/;
+check(
+  'contours are drawn as a dark casing under a light core',
+  casingStroke.test(heatmapCode) && coreStroke.test(heatmapCode)
+);
+// Order matters: a core painted before its casing would be buried by it.
+check(
+  'the dark casing is stroked before the light core',
+  heatmapCode.indexOf('rgba(8, 11, 16') <
+    heatmapCode.indexOf('rgba(255, 255, 255')
+);
+check(
+  'the casing is wider than the core, so the line has an edge everywhere',
+  /lineWidth = style\.width \+ 1\.6/.test(heatmapCode) &&
+    /lineWidth = style\.width;/.test(heatmapCode)
+);
+
+check(
+  'contours are traced by marching squares over the grid',
+  /function contourSegments\(/.test(heatmapCode) &&
+    // A saddle case is the part a naive implementation drops.
+    /case 5:/.test(heatmapCode) &&
+    /case 10:/.test(heatmapCode)
+);
+// Two separate guards: the tracer skips nulls, and the painter leaves them
+// transparent. Either one alone would let a hole be painted or traced.
+// Sliced from each *definition*. A bare indexOf('paintCells(') finds the call
+// site in render() first - before the method body - and then asserts against
+// the wrong 3000 characters, which fails on correct code.
+const bodyOf = (src, signature) => {
+  const at = src.indexOf(signature);
+  return at === -1 ? '' : src.slice(at, at + 3000);
+};
+const contourBlock = bodyOf(heatmapJs, 'function contourSegments');
+const paintBlock = bodyOf(
+  heatmapJs,
+  'paintCells(heatmap, roomWidth, roomHeight, options'
+);
+check(
+  'a null sample is skipped by the contour tracer',
+  /point\.rssi === null/.test(contourBlock)
+);
+// paintCells mentions point.rssi === null three times - in the anyGap probe, the
+// per-cell isGap mask and the no-data loop. Requiring "at least one" was
+// satisfied by any two of them, so deleting the gap mask passed. Require the
+// isGap definition itself.
+check(
+  'a null sample is left transparent by the painter',
+  /const isGap\s*=\s*\n?\s*!point \|\|[\s\S]{0,120}?point\.rssi === null/.test(
+    stripComments(paintBlock)
+  )
+);
 
 /* ---- no fabricated demo ----
  *

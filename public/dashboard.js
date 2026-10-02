@@ -13,7 +13,8 @@ class Dashboard {
     this.renderer = new HeatmapRenderer(this.canvas);
     this.legend = new LegendBar(
       document.getElementById('legendBar'),
-      document.getElementById('legendLabels')
+      document.getElementById('legendLabels'),
+      document.getElementById('legendTicks')
     );
     this.currentData = null;
     this.isPaused = false;
@@ -50,6 +51,10 @@ class Dashboard {
     this.historyBuffer = [];
     this.exporter = new ExportManager();
     this.bindExportButtons();
+    const rampButton = document.getElementById('rampToggle');
+    if (rampButton) {
+      rampButton.addEventListener('click', () => this.cycleRamp());
+    }
 
     window.addEventListener('resize', () => {
       this.renderer.resize();
@@ -96,6 +101,56 @@ class Dashboard {
     this.fpsBadge.textContent = `${fps.toFixed(0)} fps`;
   }
 
+  /**
+   * The colour ramp, and everything that has to follow it.
+   *
+   * The map, the legend and the badge are all updated here rather than in the
+   * renderer, because the renderer owns the ramp value but not the DOM. The
+   * legend is re-rendered from the new ramp immediately, so the bar and the
+   * map never show different scales even for one frame.
+   */
+  cycleRamp() {
+    const ramp = this.renderer.cycleRamp();
+    this.updateRampBadge();
+    if (this.currentData) {
+      this.legend.render(this.minRssi, this.maxRssi, ramp);
+      this.render();
+    }
+    return ramp;
+  }
+
+  updateRampBadge() {
+    const ramp = this.renderer.ramp;
+    const label = document.getElementById('rampLabel');
+    const button = document.getElementById('rampToggle');
+    const swatch = document.getElementById('rampSwatch');
+    const meta = ColorMapper.RAMPS[ramp];
+    if (label) label.textContent = ramp;
+    if (button) {
+      button.setAttribute(
+        'aria-label',
+        `Colour ramp: ${meta ? meta.label : ramp}. Activate for the next ramp.`
+      );
+    }
+    if (swatch) {
+      // A three-stop slice of the ramp itself, not a hard-coded colour, so the
+      // swatch cannot drift from the bar it is standing in for.
+      const picks = [0.2, 0.6, 0.9];
+      swatch.style.background = `linear-gradient(90deg, ${picks
+        .map((t) =>
+          ColorMapper.toCss(
+            ColorMapper.getColor(
+              this.minRssi + t * (this.maxRssi - this.minRssi),
+              this.minRssi,
+              this.maxRssi,
+              ramp
+            )
+          )
+        )
+        .join(', ')})`;
+    }
+  }
+
   /** Which grid is painted, in the header badge. */
   updateModeBadge() {
     if (!this.modeBadge || !this.renderer) return;
@@ -111,7 +166,8 @@ class Dashboard {
     this.roomHeight = data.roomHeight;
     this.isPaused = Boolean(data.params && data.params.paused);
 
-    this.legend.render(this.minRssi, this.maxRssi);
+    this.legend.render(this.minRssi, this.maxRssi, this.renderer.ramp);
+    this.legend.renderTicks(this.minRssi, this.maxRssi, CONTOUR_LEVELS);
 
     if (first) {
       // The sidebar cannot be built before the first frame, because the
@@ -125,6 +181,7 @@ class Dashboard {
     this.render();
     this.updateFps();
     this.updateModeBadge();
+    this.updateRampBadge();
     this.updateSidebar();
     // Chrome first: it sets this.demoMode, which the panel body reads. The other
     // way round shows the local-install wording for one frame on every update.

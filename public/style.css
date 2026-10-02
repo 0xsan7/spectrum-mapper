@@ -407,10 +407,62 @@ main {
   flex-shrink: 0;
 }
 
+/* The bar and its tick rail share a wrapper so a tick can be positioned
+   against the bar's own width rather than the legend's. */
+.legend-scale {
+  position: relative;
+}
+
 .legend-bar {
   height: 10px;
   border-radius: var(--radius-sm);
   border: var(--border-w) solid var(--border-strong);
+}
+
+/* Contour levels, marked on the bar. --accent rather than white so they read
+   against both ends of the ramp: a white tick vanishes into the pale top. */
+.legend-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.legend-ticks i {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: var(--border-w);
+  margin-left: calc(var(--border-w) / -2);
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+/* The ramp toggle reads as a button, so it needs button affordances. */
+.ramp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ramp-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ramp-toggle i {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0.5rem;
+  border-radius: 1px;
+  border: var(--border-w) solid var(--border-strong);
+  flex: none;
 }
 
 .legend-labels {

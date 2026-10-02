@@ -52,8 +52,11 @@ function hostArray(value) {
 test('ColorMapper spans blue to red across the configured range', () => {
   const { ColorMapper } = loadScript('colors.js', ['ColorMapper']);
 
-  const weakest = hostArray(ColorMapper.getColor(-100, -100, -20));
-  const strongest = hostArray(ColorMapper.getColor(-20, -100, -20));
+  // Explicitly the classic ramp. The default is now inferno, and these
+  // assertions describe the blue-red ramp by name - so they say which ramp
+  // they are about rather than relying on whatever the default happens to be.
+  const weakest = hostArray(ColorMapper.getColor(-100, -100, -20, 'classic'));
+  const strongest = hostArray(ColorMapper.getColor(-20, -100, -20, 'classic'));
 
   assert.deepStrictEqual(weakest, [0, 102, 255], '-100 dBm is the blue end');
   assert.deepStrictEqual(strongest, [255, 0, 0], '-20 dBm is the red end');
@@ -62,12 +65,12 @@ test('ColorMapper spans blue to red across the configured range', () => {
 test('ColorMapper clamps out-of-range values to the end colours', () => {
   const { ColorMapper } = loadScript('colors.js', ['ColorMapper']);
   assert.deepStrictEqual(
-    hostArray(ColorMapper.getColor(-500, -100, -20)),
+    hostArray(ColorMapper.getColor(-500, -100, -20, 'classic')),
     [0, 102, 255],
     'below the floor clamps to blue'
   );
   assert.deepStrictEqual(
-    hostArray(ColorMapper.getColor(50, -100, -20)),
+    hostArray(ColorMapper.getColor(50, -100, -20, 'classic')),
     [255, 0, 0],
     'above the ceiling clamps to red'
   );
@@ -83,7 +86,7 @@ test('ColorMapper ramps blue to red with a single green peak', () => {
   for (let rssi = -100; rssi <= -20; rssi += 1) {
     samples.push({
       rssi,
-      rgb: hostArray(ColorMapper.getColor(rssi, -100, -20)),
+      rgb: hostArray(ColorMapper.getColor(rssi, -100, -20, 'classic')),
     });
   }
 

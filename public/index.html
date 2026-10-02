@@ -40,6 +40,19 @@
             model
           </span>
 
+          <!-- Colour ramp. Icon-free and wordy on purpose: "inferno" tells you
+               what you are looking at, which a swatch does not. -->
+          <button
+            id="rampToggle"
+            class="mode-badge ramp-toggle"
+            type="button"
+            aria-label="Colour ramp: Inferno (perceptual). Activate for the next ramp."
+            title="Colour ramp. Press R to cycle."
+          >
+            <span id="rampLabel">inferno</span>
+            <i id="rampSwatch" aria-hidden="true"></i>
+          </button>
+
           <span
             class="fps-badge"
             id="fpsBadge"
@@ -97,7 +110,16 @@
             <div id="tooltip" class="tooltip" hidden></div>
           </div>
           <div class="legend">
-            <div id="legendBar" class="legend-bar"></div>
+            <div class="legend-scale">
+              <div id="legendBar" class="legend-bar"></div>
+              <!-- Where the contour lines fall, so a reader can match a line
+                   on the map to a level on the bar without arithmetic. -->
+              <div
+                id="legendTicks"
+                class="legend-ticks"
+                aria-hidden="true"
+              ></div>
+            </div>
             <div id="legendLabels" class="legend-labels">
               <span>-</span><span>-</span><span>-</span>
             </div>
