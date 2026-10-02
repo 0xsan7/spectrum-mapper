@@ -2,6 +2,7 @@ const express = require('express');
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const RFSimulation = require('./simulation');
 const Receivers = require('./receivers');
@@ -43,6 +44,46 @@ const history = new History(HISTORY_CAPACITY);
 
 /** Measured readings, bounded. See src/readings.js. */
 const readings = new Readings.ReadingsStore();
+
+/**
+ * The survey a demo starts from.
+ *
+ * Demo mode exists so a stranger can open the app and see the measured mode
+ * doing something, without being able to push readings in. Without a preload the
+ * Measured panel reads "none" and the most interesting mode is the one nobody
+ * tries.
+ *
+ * Read once at boot and never from disk again: this is a fixture, not a data
+ * source, so an operator editing the file cannot change a running demo.
+ */
+const SAMPLE_READINGS = path.join(
+  __dirname,
+  '..',
+  'docs',
+  'examples',
+  'sample-readings.csv'
+);
+
+function loadSampleReadings() {
+  const text = fs.readFileSync(SAMPLE_READINGS, 'utf8');
+  const parsed = Readings.parseCsv(text);
+  if (!parsed.ok) {
+    throw new Error(`sample-readings.csv did not parse: ${parsed.error}`);
+  }
+  const result = Readings.validatePayload(parsed.points);
+  if (!result.ok) {
+    // The file is in the repository and checked by the suite, so reaching this
+    // means a broken image. Throwing is right: a demo that silently started
+    // with no readings would look identical to one that worked.
+    throw new Error(`sample-readings.csv is invalid: ${result.error}`);
+  }
+  readings.replaceAll(result.points);
+  return result.points.length;
+}
+
+if (CONFIG.DEMO_MODE) {
+  loadSampleReadings();
+}
 
 /**
  * Sequence number of the last history sample sent to clients. A sequence
@@ -415,6 +456,16 @@ function resetScene() {
   params.frequency = 2437;
   params.noise = 3;
   params.paused = 0;
+  // Put the demo's survey back rather than leaving it empty. Clearing here
+  // instead would mean a visitor who waited out the idle window found the
+  // Measured panel gone and no way to get it back - the one control for it is
+  // hidden in demo mode.
+  if (CONFIG.DEMO_MODE) {
+    loadSampleReadings();
+  } else {
+    readings.clear();
+    measuredCache = { key: '', value: null };
+  }
 }
 
 /**
@@ -843,6 +894,7 @@ process.on('SIGTERM', shutdown);
 
 module.exports = {
   CONFIG,
+  LIMITS: Readings.LIMITS,
 
   app,
   server,

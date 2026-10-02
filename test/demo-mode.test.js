@@ -183,11 +183,19 @@ test('a demo refuses ingest even with a correct token', async () => {
 test('a refused ingest stores nothing', async () => {
   const s = await startServer({ DEMO_MODE: '1' });
   try {
+    // Measured against the preloaded survey rather than against zero: a demo
+    // starts with 42 points, so this proves the rejected POST was not added, not
+    // that the store happened to be empty.
+    const before = (
+      await (await fetch(`http://127.0.0.1:${s.port}/healthz`)).json()
+    ).readings;
+    assert.ok(before > 0, 'the fixture should have a preloaded survey');
+
     await post(s.port, '/api/readings', { x: 1, y: 1, rssi: -50 });
-    const body = await (
-      await fetch(`http://127.0.0.1:${s.port}/healthz`)
-    ).json();
-    assert.strictEqual(body.readings, 0, 'a 403 that still stored the reading');
+    const after = (
+      await (await fetch(`http://127.0.0.1:${s.port}/healthz`)).json()
+    ).readings;
+    assert.strictEqual(after, before, 'a 403 that still stored the reading');
   } finally {
     s.stop();
   }
@@ -616,7 +624,8 @@ test('GET /healthz answers before the first frame exists', async () => {
     assert.strictEqual(body.demo, true);
     assert.strictEqual(body.room.width, 20);
     assert.strictEqual(body.room.height, 15);
-    assert.strictEqual(body.readings, 0);
+    // A demo preloads the sample survey, so this is 42 rather than 0.
+    assert.strictEqual(body.readings, 42);
     assert.strictEqual(typeof body.uptimeSeconds, 'number');
   } finally {
     s.stop();
@@ -707,5 +716,269 @@ test('a reset unpins a dragged transmitter', () => {
     r.pinnedAfter,
     false,
     'a dragged transmitter stayed pinned after a reset'
+  );
+});
+
+/* ---- the preloaded sample survey ---- */
+
+test('a demo boots with the 42-point sample survey already loaded', () => {
+  const r = probe(
+    `
+    const { readings } = require('${SERVER}');
+    process.stdout.write(JSON.stringify({ size: readings.size }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  // Counted from the file rather than hard-coded, so regenerating the sample
+  // does not fail a test for no reason - but asserted to be 42 as well, because
+  // "42" is the number the demo claims to ship.
+  const sample =
+    require('fs')
+      .readFileSync(
+        path.join(ROOT, 'docs/examples/sample-readings.csv'),
+        'utf8'
+      )
+      .trim()
+      .split('\n').length - 1;
+  assert.strictEqual(
+    r.size,
+    sample,
+    `store holds ${r.size}, file has ${sample} rows`
+  );
+  assert.strictEqual(
+    r.size,
+    42,
+    'the shipped sample survey should be 42 points'
+  );
+});
+
+test('outside demo mode nothing is preloaded', () => {
+  const r = probe(
+    `
+    const { readings } = require('${SERVER}');
+    process.stdout.write(JSON.stringify({ size: readings.size }));
+  `,
+    { DEMO_MODE: '0' }
+  );
+  assert.strictEqual(r.size, 0, 'a local install must start empty');
+});
+
+test('the idle reset restores the survey instead of emptying it', () => {
+  const r = probe(
+    `
+    const { readings, resetScene } = require('${SERVER}');
+    const atBoot = readings.size;
+    readings.clear();                       // as a visitor's Clear button would
+    const afterClear = readings.size;
+    resetScene();
+    const afterReset = readings.size;
+    process.stdout.write(JSON.stringify({ atBoot, afterClear, afterReset,
+      firstAfterReset: readings.all()[0] }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  assert.strictEqual(r.afterClear, 0, 'the fixture could not clear the store');
+  assert.strictEqual(
+    r.afterReset,
+    r.atBoot,
+    'the reset did not put the survey back'
+  );
+  assert.ok(r.firstAfterReset, 'the restored store is empty');
+});
+
+test('the reset outside demo mode still empties the store', () => {
+  const r = probe(
+    `
+    const { readings, resetScene } = require('${SERVER}');
+    readings.add([{ x: 1, y: 1, rssi: -50 }, { x: 2, y: 2, rssi: -55 }]);
+    const before = readings.size;
+    resetScene();
+    process.stdout.write(JSON.stringify({ before, after: readings.size }));
+  `,
+    { DEMO_MODE: '0' }
+  );
+  assert.strictEqual(r.before, 2);
+  assert.strictEqual(
+    r.after,
+    0,
+    'a local reset should not leave readings behind'
+  );
+});
+
+test('the restored survey is the same survey, not a truncated one', () => {
+  // "42 again" is not enough: a restore that dropped the oldest few would still
+  // report 42. Compare against the file, point for point. The comparison
+  // happens out here because __dirname inside the probe is the cwd, not the
+  // repository.
+  const fromFile = require('fs')
+    .readFileSync(path.join(ROOT, 'docs/examples/sample-readings.csv'), 'utf8')
+    .trim()
+    .split('\n')
+    .slice(1)
+    .map((line) => line.split(',').map(Number));
+
+  const r = probe(
+    `
+    const { readings, resetScene } = require('${SERVER}');
+    readings.clear();
+    resetScene();
+    // Wrapped: probe() slices from the first '{', so a bare array would be
+    // parsed from its first element and throw.
+    process.stdout.write(JSON.stringify({ points: readings.all() }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+
+  assert.strictEqual(r.points.length, 42);
+  assert.deepStrictEqual(
+    r.points.map((pt) => [pt.x, pt.y, pt.rssi]),
+    fromFile,
+    'the restored survey differs from the file on disk'
+  );
+});
+
+test('a demo still refuses ingest after preloading', () => {
+  // Preloading must not have opened the door it went through.
+  const r = probe(
+    `
+    const { readings } = require('${SERVER}');
+    const before = readings.size;
+    const added = readings.add([{ x: 5, y: 5, rssi: -42 }]);
+    process.stdout.write(JSON.stringify({ before, after: readings.size, added }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  // The store itself has no notion of demo mode - the route is the gate. What
+  // matters is that the preload went through add() too, so the API is identical.
+  assert.strictEqual(r.before, 42);
+  assert.ok(
+    r.after > r.before,
+    'the store should still accept; the route is the gate'
+  );
+});
+
+test('a survey larger than the store cap is truncated, not overflowing', () => {
+  // The shipped sample is far below the cap, so this drives the store directly
+  // with an oversized survey. It guards the preload path: replaceAll goes
+  // through add(), and add() is where the eviction happens.
+  const r = probe(
+    `
+    const { readings, LIMITS } = require('${SERVER}');
+    const many = [];
+    for (let i = 0; i < LIMITS.MAX_POINTS + 10; i++) {
+      many.push({ x: 1, y: 1, rssi: -50 - (i % 10) });
+    }
+    readings.replaceAll(many);
+    process.stdout.write(JSON.stringify({ size: readings.size, cap: LIMITS.MAX_POINTS }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  assert.strictEqual(
+    r.size,
+    r.cap,
+    `store held ${r.size} against a ${r.cap} cap`
+  );
+});
+
+test('replaceAll discards what was there first', () => {
+  // The survey is 42 points; prepending more must leave 42, not 42 + the
+  // extra. A replaceAll that appends would still pass the "reset restores the
+  // survey" test, because the survey is still in there.
+  const r = probe(
+    `
+    const { readings, resetScene } = require('${SERVER}');
+    readings.add([{ x: 1, y: 1, rssi: -11 }, { x: 2, y: 2, rssi: -22 }]);
+    const afterAdd = readings.size;
+    resetScene();
+    process.stdout.write(JSON.stringify({ afterAdd, afterReset: readings.size }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  assert.strictEqual(r.afterAdd, 44, 'the fixture could not add anything');
+  assert.strictEqual(
+    r.afterReset,
+    42,
+    'replaceAll appended instead of replacing'
+  );
+});
+
+test('replaceAll rewinds the dropped counter', () => {
+  // A dropped count that only ever grows reports history that did not happen:
+  // after a reset there is nothing dropped, because nothing was ever evicted.
+  const r = probe(
+    `
+    const { readings, resetScene, LIMITS } = require('${SERVER}');
+    const many = [];
+    for (let i = 0; i < LIMITS.MAX_POINTS + 25; i++) {
+      many.push({ x: 1, y: 1, rssi: -50 - (i % 10) });
+    }
+    readings.replaceAll(many);
+    const afterOverflow = readings.dropped;
+    resetScene();
+    process.stdout.write(JSON.stringify({ afterOverflow, afterReset: readings.dropped,
+      size: readings.size }));
+  `,
+    { DEMO_MODE: '1' }
+  );
+  assert.ok(r.afterOverflow > 0, 'the fixture did not overflow the store');
+  assert.strictEqual(r.size, 42, 'the reset should put the survey back');
+  assert.strictEqual(
+    r.afterReset,
+    0,
+    `the dropped counter survived a reset at ${r.afterReset}`
+  );
+});
+
+test('a corrupt sample file fails the boot rather than starting empty', () => {
+  // A demo that silently starts with no readings looks exactly like one that
+  // worked: the Measured panel just says "none". So a bad file has to be loud.
+  // Mutating the real CSV is the only way to reach that path - a fixture file
+  // would test the fixture.
+  const csvPath = path.join(ROOT, 'docs/examples/sample-readings.csv');
+  const fsx = require('fs');
+  const original = fsx.readFileSync(csvPath, 'utf8');
+
+  const bootFails = () =>
+    assert.throws(
+      () =>
+        probe('process.stdout.write(JSON.stringify({ ok: true }));', {
+          DEMO_MODE: '1',
+        }),
+      /sample-readings\.csv/i,
+      'a broken sample file should fail the boot'
+    );
+
+  // Mutate by position rather than by value: the sample file is regenerated from
+  // the path-loss model, so no particular row is stable across regenerations.
+  try {
+    // 1. A non-numeric coordinate.
+    const lines = original.trim().split('\n');
+    lines[3] = lines[3].replace(/^([^,]+)/, 'not-a-number');
+    fsx.writeFileSync(csvPath, `${lines.join('\n')}\n`);
+    bootFails();
+
+    // 2. A row outside the room.
+    fsx.writeFileSync(csvPath, `${original}999,999,-50\n`);
+    bootFails();
+
+    // 3. A missing header, so it does not parse as the documented format.
+    fsx.writeFileSync(csvPath, original.trim().split('\n').slice(1).join('\n'));
+    bootFails();
+  } finally {
+    fsx.writeFileSync(csvPath, original);
+  }
+
+  // 4. Restored, the boot is clean again - otherwise case 1 would "pass" by
+  //    leaving the file broken for everything after it.
+  assert.strictEqual(
+    probe(
+      `
+      const { readings } = require('${SERVER}');
+      process.stdout.write(JSON.stringify({ size: readings.size }));
+    `,
+      { DEMO_MODE: '1' }
+    ).size,
+    42,
+    'the file was not restored'
   );
 });

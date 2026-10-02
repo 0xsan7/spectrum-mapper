@@ -250,6 +250,25 @@ class ReadingsStore {
     this.points = [];
     return n;
   }
+
+  /**
+   * Discard everything and put this exact set back.
+   *
+   * Distinct from clear() because a demo needs to undo whatever a visitor did
+   * and be back to the survey it started from. Resets the counters too: the
+   * dropped count would otherwise keep growing across resets with nothing to
+   * show for it.
+   *
+   * @returns {{stored: number, evicted: number, total: number, droppedTotal: number}}
+   */
+  replaceAll(points) {
+    this.points = [];
+    this.dropped = 0;
+    // The accepted counter is monotonic for the life of a client, so it is not
+    // rewound here; it feeds the interpolation cache key, and a cache miss on a
+    // restore is cheaper than a stale layer.
+    return this.add(points);
+  }
 }
 
 module.exports = {

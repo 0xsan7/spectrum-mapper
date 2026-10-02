@@ -12,6 +12,12 @@ dist
 .env.*.local
 *.md
 !README.md
+# The demo container preloads the sample survey at boot, so this one file has to
+# reach the build context. Every other document stays out.
+docs/*
+!docs/examples/
+docs/examples/*
+!docs/examples/sample-readings.csv
 .vscode
 .idea
 .DS_Store

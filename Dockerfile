@@ -23,6 +23,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 COPY public ./public
+# The demo preloads this file at boot, so it has to be in the image. Copying the
+# one directory rather than all of docs/ keeps the markdown out of the runtime.
+COPY docs/examples ./docs/examples
 
 # Run unprivileged. The node image ships a `node` user (uid 1000).
 USER node
