@@ -355,6 +355,170 @@ for (const e of endpoints) {
 }
 
 /*
+ * The preloaded demo survey, documented and shipped.
+ *
+ * Four things have to be true at once, and the Dockerfile quietly broke one of
+ * them: the Dockerfile copied src/ and public/ only, so a demo container had no
+ * sample file to preload and would have failed to start. That is invisible to a
+ * unit test, which reads the file from the working tree.
+ */
+{
+  const serverSrc = read('src/server.js');
+  const dockerfile = read('Dockerfile');
+  const dockerignore = read('.dockerignore');
+  const deploy = read('docs/deploy.md');
+  const realData = read('docs/real-data.md');
+
+  // The image has to carry the file.
+  check(
+    'the Dockerfile copies docs/examples into the image',
+    /COPY\s+docs\/examples\s+\.\/docs\/examples/.test(dockerfile),
+    'a demo container would have no sample file to preload'
+  );
+  const ignoreLines = dockerignore.split('\n').map((l) => l.trim());
+  const samplePath = 'docs/examples/sample-readings.csv';
+  check(
+    '.dockerignore lets the sample CSV into the build context',
+    ignoreLines.includes(`!${samplePath}`),
+    'the file would be excluded before the Dockerfile ever sees it'
+  );
+  // Order matters and reading the file line-by-line does not catch it: a
+  // negation above the exclusion it undoes is dead. Docker applies these in
+  // order, so the last matching pattern wins.
+  {
+    const excludes = ignoreLines
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => l === 'docs/*' || l === 'docs/**' || l === 'docs');
+    const negates = ignoreLines
+      .map((l, i) => ({ l, i }))
+      .filter(
+        ({ l }) =>
+          l === `!${samplePath}` ||
+          l === '!docs/examples/' ||
+          l === '!docs/examples'
+      );
+    const lastExclude = excludes.length ? excludes[excludes.length - 1].i : -1;
+    const lastNegate = negates.length ? negates[negates.length - 1].i : -1;
+    check(
+      'the .dockerignore negation comes after any rule excluding docs/',
+      lastNegate > lastExclude,
+      'a negation before the exclusion is dead in Docker'
+    );
+    check(
+      'no rule excludes docs/examples after the negation',
+      !ignoreLines
+        .slice(lastNegate + 1)
+        .some((l) => l === 'docs/examples/*' || l === 'docs/examples/**'),
+      'something re-excludes the sample file'
+    );
+  }
+  check(
+    'the sample file the preload reads is tracked in git',
+    execFileSync('git', ['ls-files', 'docs/examples/sample-readings.csv'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    }).trim() === 'docs/examples/sample-readings.csv',
+    'an untracked sample would work locally and fail in a clean checkout'
+  );
+
+  // The code actually does it.
+  check(
+    'the server preloads the sample only in demo mode',
+    /if \(CONFIG\.DEMO_MODE\) \{\s*\n?\s*loadSampleReadings\(\);/.test(
+      serverSrc
+    )
+  );
+  check(
+    'the preload path is built from docs/examples/sample-readings.csv',
+    // Match the path.join segments, not the bare filename: the same literal
+    // also appears in two error messages, so a check on the string alone passes
+    // when the code has been pointed at a file that does not exist.
+    /path\.join\(\s*__dirname,\s*'\.\.',\s*'docs',\s*'examples',\s*'sample-readings\.csv'\s*\)/.test(
+      serverSrc.replace(/\s+/g, ' ')
+    )
+  );
+  check(
+    'the preload path resolves to a file that exists',
+    exists('docs/examples/sample-readings.csv')
+  );
+  check(
+    'the preload validates the file and throws rather than continuing',
+    /sample-readings\.csv is invalid/.test(serverSrc)
+  );
+  check(
+    'the reset restores the preload in demo mode',
+    /if \(CONFIG\.DEMO_MODE\) \{\s*\n?\s*loadSampleReadings\(\);\s*\n?\s*\} else \{\s*\n?\s*readings\.clear\(\)/.test(
+      serverSrc
+    ),
+    'the reset must put the survey back in a demo and empty the store otherwise'
+  );
+
+  // The docs must describe it, in both places a reader would look.
+  check(
+    'docs/deploy.md says the demo loads the sample survey',
+    /sample survey is loaded at boot/i.test(deploy)
+  );
+  // "42" has to sit next to the survey, not be any 42 on the page: the page
+  // quotes other numbers, and an unrelated one satisfied this.
+  check(
+    'docs/deploy.md states the survey has 42 readings',
+    /with the 42 readings/i.test(deploy),
+    'the count must be stated with the survey, not anywhere on the page'
+  );
+  check(
+    'docs/deploy.md names the demo panel heading',
+    /Sample survey \(demo data\)/.test(deploy)
+  );
+  check(
+    'docs/deploy.md says the import control is hidden',
+    /import control is hidden/i.test(deploy)
+  );
+  check(
+    'docs/deploy.md does not claim the panel stays empty in a demo',
+    !/stay in the UI and the requests come back/i.test(deploy),
+    'the panel is populated now'
+  );
+  check(
+    'docs/real-data.md has a demo section',
+    /## In a public demo/.test(realData)
+  );
+  check(
+    'docs/real-data.md says the store starts full in a demo',
+    /starts full/i.test(realData)
+  );
+  check(
+    'docs/real-data.md states the survey has 42 points',
+    // Anchored to the sentence about the preloaded survey. A looser "42 near
+    // the word points" passed on the JSON example, whose "accepted": 42 sits
+    // within 40 characters of "points".
+    /\*\*The store starts full, not empty\.\*\*[\s\S]{0,200}?\b42\b/.test(
+      realData
+    ),
+    'the count must be stated in the sentence about the preloaded survey'
+  );
+  check(
+    'docs/real-data.md says ingest answers 403 in a demo',
+    /403/.test(realData)
+  );
+  check(
+    'docs/real-data.md says the reset restores the survey',
+    /reset restores that survey/i.test(realData)
+  );
+  check(
+    'docs/real-data.md links the sample file it names',
+    /\]\(examples\/sample-readings\.csv\)/.test(realData),
+    'expected a markdown link to examples/sample-readings.csv'
+  );
+  check(
+    'the file real-data.md links is the one the preload reads',
+    /\]\(examples\/sample-readings\.csv\)/.test(realData) &&
+      /sample-readings\.csv/.test(serverSrc) &&
+      exists('docs/examples/sample-readings.csv'),
+    'the docs and the code should be talking about the same file'
+  );
+}
+
+/*
  * The demo-mode UI, checked for the two states that matter.
  *
  * A control that stays visible in a demo invites a click that can only fail

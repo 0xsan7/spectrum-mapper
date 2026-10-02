@@ -66,11 +66,27 @@ With `DEMO_MODE=1`:
   commands. A visitor who drags a transmitter into a corner and walks away does
   not hand the next visitor their corner.
 - **A banner** at the top of the page says everyone shares the same room.
-- **`GET /healthz`** answers `{"status":"ok", ...}`.
+- **The bundled sample survey is loaded at boot.** The Measured panel starts
+  with the 42 readings from
+  [`docs/examples/sample-readings.csv`](../docs/examples/sample-readings.csv)
+  rather than an empty room, so the measured map mode does something the moment
+  somebody opens it.
+- **The Measured panel is labelled** "Sample survey (demo data)" and says the
+  readings are bundled. Those are not a visitor's measurements, and the heading
+  should not imply they are.
+- **The CSV import control is hidden**, and **Clear readings** refuses. Ingest
+  answers `403` in a demo, so an import button could only ever produce an error,
+  and clearing would leave the panel empty with no way to put the survey back
+  until the next idle reset.
+- **`GET /healthz`** answers `{"status":"ok", ...}`, and reports 42 readings.
 
-Measured readings are the part a demo cannot have, so the Measured panel and the
-CSV import button stay in the UI and the requests come back `403`. On a local
-install they work; that difference is the point of `DEMO_MODE`.
+The reset puts the sample survey back rather than clearing it, for the same
+reason: a visitor who waits out the idle window should find the room as they
+left it, not an empty one with no control to refill it.
+
+Outside demo mode nothing about this changes. The panel reads "Measured", the
+import and clear controls are there, and the store starts empty - see
+[real-data.md](real-data.md).
 
 ## Free tier, and what sleeping means
 
