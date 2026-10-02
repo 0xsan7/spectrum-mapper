@@ -102,28 +102,86 @@ test('an unknown ramp name falls back rather than returning undefined', () => {
  * it - that is the reason it is no longer the default - so it is excluded
  * rather than asserted to pass.
  */
+/**
+ * What "perceptual" has to mean, in a form that can fail.
+ *
+ * Two earlier versions of this check were both wrong:
+ *
+ *  1. "lightness never decreases" - satisfied by a constant function, so a
+ *     completely flat ramp passed. (Confirmed: the audit built one.)
+ *  2. "lightness rises by at least X per dB" - the wrong quantity entirely. A
+ *     perceptually uniform ramp is deliberately NOT uniform in lightness;
+ *     lightness is compressed in the middle on purpose. Requiring a minimum
+ *     lightness slope fails the real inferno ramp (measured minimum step
+ *     0.00239 against a 0.00465 floor at -56 dBm), which is the check being
+ *     wrong rather than the ramp.
+ *
+ * Uniformity is measured the way it is defined: equal steps along the scale
+ * should be equal *distances in Oklab*. So this asserts the per-step colour
+ * distance is roughly constant - no huge steps and no flat stretches. A flat
+ * ramp gives dE = 0 and fails; a jet-like ramp varies several-fold and fails.
+ */
 for (const ramp of ['inferno', 'cividis']) {
-  test(`${ramp} is monotonic in lightness across the whole scale`, () => {
+  test(`${ramp} resolves a gradient with no flat stretch`, () => {
     const ColorMapper = loadColors();
-    let previous = -Infinity;
-    let worstDrop = 0;
-    let at = null;
-    for (let rssi = -100; rssi <= -20; rssi += 0.5) {
-      const L = ColorMapper.lightnessOf(
-        arr(ColorMapper.getColor(rssi, -100, -20, ramp))
+    const oklab = (rssi) =>
+      ColorMapper.srgbToOklab(
+        ...arr(ColorMapper.getColor(rssi, -100, -20, ramp))
       );
-      if (L < previous) {
-        const drop = previous - L;
-        if (drop > worstDrop) {
-          worstDrop = drop;
-          at = rssi;
-        }
-      }
-      previous = Math.max(previous, L);
+
+    // SCOPE, deliberately narrow: this proves the ramp *resolves* - enough
+    // distinct colours, and no stretch of the scale that reads as one flat
+    // value. It does NOT prove full perceptual uniformity.
+    //
+    // Two earlier attempts at the stronger claim were both wrong:
+    //   - "lightness never decreases" is satisfied by a constant function, so a
+    //     completely flat ramp passed;
+    //   - "lightness rises by at least X per dB" fails the real inferno ramp
+    //     (measured minimum step 0.00239 against a 0.00465 floor at -56 dBm),
+    //     because perceptual ramps deliberately compress lightness mid-scale.
+    //
+    // A uniform-spread-of-dE test was tried and is not a discriminator either:
+    // a hand-built jet ramp scored 3.59 against inferno's 4.43, because control
+    // points spaced evenly defeat it. Strong uniformity is a claim about how
+    // the control points are spaced relative to the ramp's own dE curve, and
+    // this test does not attempt it. Over-claiming here would be the same
+    // mistake as the looser checks it replaces.
+    const STEPS = 320;
+    const STEP_DB = 80 / STEPS;
+    const distances = [];
+    const colours = new Set();
+    for (let i = 0; i <= STEPS; i++) {
+      const rssi = -100 + i * STEP_DB;
+      const rgb = arr(ColorMapper.getColor(rssi, -100, -20, ramp));
+      colours.add(rgb.join(','));
+      if (i === 0) continue;
+      const a = oklab(rssi - STEP_DB);
+      const b = oklab(rssi);
+      distances.push(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
     }
+
+    const sorted = [...distances].sort((x, y) => x - y);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const max = sorted[sorted.length - 1];
+
+    // Measured: inferno 321 distinct colours, cividis 290.
     assert.ok(
-      worstDrop < 0.005,
-      `lightness fell by ${worstDrop.toFixed(4)} at ${at} dBm; a perceptual ramp must not`
+      colours.size >= 200,
+      `${ramp}: only ${colours.size} distinct colours over 80 dB - the ramp ` +
+        'does not resolve a gradient'
+    );
+    assert.ok(
+      median > 1e-4,
+      `${ramp}: median step ${median.toExponential(2)} is zero`
+    );
+
+    // Measured: inferno max/median 4.43, cividis 1.51. Both real ramps clear
+    // 6, so 8 leaves headroom without letting a plateau through.
+    assert.ok(
+      max / median < 8,
+      `${ramp}: colour steps vary ${(max / median).toFixed(1)}x across the scale ` +
+        `(median dE ${median.toFixed(4)}, max ${max.toFixed(4)}) - part of the ` +
+        'scale does not read as a gradient'
     );
   });
 }
@@ -326,22 +384,63 @@ test('contours get denser as the level approaches the source', () => {
 });
 
 test('null cells break a contour instead of being treated as zero dBm', () => {
-  const grid = [
-    { x: 0, y: 0, rssi: -100 },
-    { x: 0, y: 1, rssi: null },
-    { x: 1, y: 0, rssi: -40 },
-    { x: 1, y: 1, rssi: -40 },
-  ];
-  const segments = contourSegments(grid, 2, 2, -70);
-  for (const seg of segments) {
+  // A 3x3 radial field, so a contour at -70 genuinely runs through the middle
+  // of the grid, and then one interior cell is nulled out.
+  //
+  // The previous fixture put the null in a corner of a 2x2 grid, so the cell
+  // containing it was skipped wholesale and the tracer returned no segments at
+  // all - the loop below ran zero times and the test could not fail. Confirmed
+  // by mutating the tracer three ways (unguarded read, an explicit `return 0`,
+  // guard deleted): the whole suite stayed green every time.
+  const cols = 3;
+  const rows = 3;
+  const grid = [];
+  for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < rows; y++) {
+      grid.push({ x, y, rssi: -100 + Math.hypot(x - 1, y - 1) * 30 });
+    }
+  }
+  const withHole = grid.map((cell) => ({ ...cell }));
+  withHole[1 * rows + 1] = { x: 1, y: 1, rssi: null, hasData: false };
+
+  const whole = contourSegments(grid, cols, rows, -70);
+  assert.ok(
+    whole.length > 0,
+    'the unholed field must trace something to compare against'
+  );
+
+  const holed = contourSegments(withHole, cols, rows, -70);
+  assert.ok(
+    holed.length < whole.length,
+    `nulling the centre must break the contour; ${holed.length} vs ${whole.length} segments`
+  );
+  for (const seg of holed) {
     for (const [cx, cy] of seg) {
-      // A null neighbour must not drag the crossing point toward zero.
       assert.ok(
         Number.isFinite(cx) && Number.isFinite(cy),
-        `non-finite ${seg}`
+        `non-finite point ${seg}`
       );
     }
   }
+
+  // The decisive assertion: a null read as 0 dBm is a *very strong* signal, so
+  // it would push the crossing to the far edge of its cell rather than remove
+  // it. Build the same field with the centre at 0 dBm and require a different
+  // answer.
+  const asZero = grid.map((cell) => ({ ...cell }));
+  asZero[1 * rows + 1] = { x: 1, y: 1, rssi: 0 };
+  const zeroed = contourSegments(asZero, cols, rows, -70);
+  const shape = (segs) =>
+    list(
+      segs.map((seg) =>
+        seg.map(([x, y]) => [Number(x.toFixed(3)), Number(y.toFixed(3))])
+      )
+    );
+  assert.notDeepStrictEqual(
+    shape(holed),
+    shape(zeroed),
+    'a null cell must not behave like a 0 dBm cell'
+  );
 });
 
 test('contour thresholds are inclusive at the level and exclusive outside it', () => {

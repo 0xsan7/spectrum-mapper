@@ -387,7 +387,15 @@ class HeatmapRenderer {
       const px = image.data;
       for (let i = 0; i < heatmap.length && i < cols * rows; i++) {
         const point = heatmap[i];
-        const at = i * 4;
+        // The lattice is column-major - grid[x * rows + y], the order
+        // src/heatmap.js and src/interpolate.js both emit - but ImageData is
+        // row-major: pixel (px, py) lives at py * width + px. Same linear
+        // index, different meaning, so `i * 4` silently transposes the field.
+        // 298 of 300 cells landed wrong in measured mode.
+        //
+        // Driven off point.x/point.y rather than i so the two cannot drift
+        // apart again, whatever order the array is in.
+        const at = (point.y * cols + point.x) * 4;
         const isGap =
           !point ||
           point.rssi === null ||

@@ -1029,7 +1029,13 @@ for (const [key, name, action] of [
  * satisfied by prose describing the conversion.
  */
 const stripComments = (src) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Whole-line comments, and trailing ones after a line of code. The trailing
+    // form was previously missed, so `px[at] = 0; // point.rssi === null` left
+    // its comment in place for a grep to find.
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/\s+\/\/[^\n]*$/gm, '');
 
 const colorsJs = read('public/colors.js');
 const heatmapJs = read('public/heatmap.js');
@@ -1229,10 +1235,18 @@ check(
   casingStroke.test(heatmapCode) && coreStroke.test(heatmapCode)
 );
 // Order matters: a core painted before its casing would be buried by it.
+// Both strokes must be *present* too. Without that, deleting the casing makes
+// both indexOf calls return -1 and -1 < 7192 is true — the check passed on the
+// exact thing it exists to forbid.
+const casingAt = heatmapCode.indexOf('rgba(8, 11, 16');
+const coreAt = heatmapCode.indexOf('rgba(255, 255, 255');
+check(
+  'both contour strokes are present to be ordered',
+  casingAt !== -1 && coreAt !== -1
+);
 check(
   'the dark casing is stroked before the light core',
-  heatmapCode.indexOf('rgba(8, 11, 16') <
-    heatmapCode.indexOf('rgba(255, 255, 255')
+  casingAt !== -1 && coreAt !== -1 && casingAt < coreAt
 );
 check(
   'the casing is wider than the core, so the line has an edge everywhere',
@@ -1256,9 +1270,12 @@ const bodyOf = (src, signature) => {
   const at = src.indexOf(signature);
   return at === -1 ? '' : src.slice(at, at + 3000);
 };
-const contourBlock = bodyOf(heatmapJs, 'function contourSegments');
+// Stripped, like the painter block below. Unstripped, a commented-out null
+// guard satisfied this check - the exact bug class the file's own header warns
+// about, reintroduced here.
+const contourBlock = bodyOf(heatmapCode, 'function contourSegments');
 const paintBlock = bodyOf(
-  heatmapJs,
+  heatmapCode,
   'paintCells(heatmap, roomWidth, roomHeight, options'
 );
 check(
