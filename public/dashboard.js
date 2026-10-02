@@ -19,14 +19,19 @@ class Dashboard {
     this.isPaused = false;
     this.frameRequested = false;
     this.statusEl = document.getElementById('statusText');
+    this.statusPill = document.getElementById('statusPill');
+    this.modeBadge = document.getElementById('modeBadge');
+    this.fpsBadge = document.getElementById('fpsBadge');
+    // Frame times are counted here rather than read from a timer, because what
+    // matters is frames the page actually painted - a tab in the background
+    // stops being given frames and the number should say so.
+    this.frameTimes = [];
     this.minRssi = -100;
     this.maxRssi = -20;
 
     this.ws = new WebSocketClient(
       (data) => this.onFrame(data),
-      ({ state }) => {
-        this.statusEl.textContent = state;
-      }
+      ({ state }) => this.setConnectionState(state)
     );
 
     this.interaction = new Interaction({
@@ -53,6 +58,52 @@ class Dashboard {
     });
   }
 
+  /**
+   * Connection state, in the pill.
+   *
+   * The pill is coloured from a data-state attribute rather than by swapping a
+   * class, so the CSS owns the colours and there is one place to change them.
+   * The state word itself is always spelled out: a red dot alone tells a
+   * colour-blind reader nothing.
+   */
+  setConnectionState(state) {
+    if (this.statusEl) this.statusEl.textContent = state;
+    if (!this.statusPill) return;
+    const key = String(state).toLowerCase();
+    // The CSS keys off 'connected' / 'disconnected' / 'connection error';
+    // anything else is a connecting-ish state and stays neutral.
+    const known = [
+      'connected',
+      'disconnected',
+      'connection error',
+      'reconnect limit reached',
+    ];
+    this.statusPill.dataset.state = known.includes(key) ? key : 'connecting';
+  }
+
+  /** Frames per second over a one-second window, refreshed on each frame. */
+  updateFps() {
+    if (!this.fpsBadge) return;
+    const now = performance.now();
+    this.frameTimes.push(now);
+    // Keep a second's worth, and no more: an unbounded array here is a slow
+    // leak on a page left open overnight.
+    while (this.frameTimes.length && now - this.frameTimes[0] > 1000) {
+      this.frameTimes.shift();
+    }
+    const span = this.frameTimes.length > 1 ? now - this.frameTimes[0] : 0;
+    const fps = span > 0 ? ((this.frameTimes.length - 1) * 1000) / span : 0;
+    this.fpsBadge.textContent = `${fps.toFixed(0)} fps`;
+  }
+
+  /** Which grid is painted, in the header badge. */
+  updateModeBadge() {
+    if (!this.modeBadge || !this.renderer) return;
+    const mode = this.renderer.mapMode;
+    this.modeBadge.dataset.mode = mode;
+    this.modeBadge.textContent = mode;
+  }
+
   onFrame(data) {
     const first = !this.currentData;
     this.currentData = data;
@@ -72,6 +123,8 @@ class Dashboard {
     }
 
     this.render();
+    this.updateFps();
+    this.updateModeBadge();
     this.updateSidebar();
     // Chrome first: it sets this.demoMode, which the panel body reads. The other
     // way round shows the local-install wording for one frame on every update.
@@ -190,6 +243,7 @@ class Dashboard {
     }
     this.renderer.mapMode = next;
     this.render();
+    this.updateModeBadge();
     this.updateMeasuredPanel();
   }
 

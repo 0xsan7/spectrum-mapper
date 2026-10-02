@@ -52,6 +52,7 @@ cannot drift. Regenerate with `npm run tree`.
 │   ├── shortcuts.js           # keyboard commands
 │   ├── spectrum-analysis.js   # coverage statistics
 │   ├── style.css              # all styling
+│   ├── theme.js               # light/dark theme, remembered
 │   └── websocket.js           # connection and reconnect state
 ├── render.yaml
 ├── 🔧 scripts/
