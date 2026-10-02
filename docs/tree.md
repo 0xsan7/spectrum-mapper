@@ -89,6 +89,7 @@ cannot drift. Regenerate with `npm run tree`.
     ├── history.test.js        # buffer, deltas, CSV quoting
     ├── host-default.test.js
     ├── interpolate.test.js
+    ├── lattice-index.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
     ├── pathLoss.test.js       # model anchored to reference values
     ├── readings-route.test.js

@@ -38,6 +38,11 @@
   --text-dim: #c3d3e2;
   --text-muted: #8ba3b8;
 
+  /* The dark edge a two-tone mark carries on a light field. Shared by the
+     contour line and the legend's level ticks; kept as a token so the two
+     cannot drift, and because a verifier recomputes contrast against it. */
+  --casing-ink: #080b10;
+
   /* Signal, estimate, tracked. */
   --accent: #00e5ff;
   --accent-dim: #52768f;
@@ -419,8 +424,22 @@ main {
   border: var(--border-w) solid var(--border-strong);
 }
 
-/* Contour levels, marked on the bar. --accent rather than white so they read
-   against both ends of the ramp: a white tick vanishes into the pale top. */
+/* Contour levels, marked on the bar.
+ *
+ * A tick is two-tone for the same reason the contour line is: --accent alone
+ * only works where the ramp is dark. Measured against the ramp colour each tick
+ * sits on:
+ *
+ *            -85      -70      -50
+ *   inferno  9.64:1   5.48:1   2.35:1     <- accent reads on the dark end
+ *   cividis  6.78:1   4.13:1   2.19:1
+ *   classic  1.42:1   1.30:1   1.41:1     <- accent is invisible throughout
+ *
+ * classic's pale stretch is its middle, which is exactly where two of the three
+ * ticks land, so every tick fell under the 3:1 non-text minimum. The dark
+ * casing below inverts that: 9.00 / 16.62 / 9.08 on classic, and it leaves the
+ * ticks readable on the dark ends too, where the accent is what carries them.
+ */
 .legend-ticks {
   position: absolute;
   inset: 0;
@@ -431,10 +450,15 @@ main {
   position: absolute;
   top: -1px;
   bottom: -1px;
-  width: var(--border-w);
-  margin-left: calc(var(--border-w) / -2);
+  /* 2px of accent between two dark edges, so the tick has a visible boundary
+     on a light field and a visible core on a dark one. */
+  width: 4px;
+  margin-left: -2px;
   background: var(--accent);
-  opacity: 0.9;
+  border-left: 1px solid var(--casing-ink);
+  border-right: 1px solid var(--casing-ink);
+  box-sizing: border-box;
+  opacity: 0.95;
 }
 
 /* The ramp toggle reads as a button, so it needs button affordances. */

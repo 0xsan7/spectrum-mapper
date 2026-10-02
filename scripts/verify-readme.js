@@ -1213,6 +1213,72 @@ check(
   'both contour stroke colours are recoverable from the renderer',
   Array.isArray(actualCasing) && Array.isArray(actualCore)
 );
+/* ---- the legend's level ticks, measured against every ramp ----
+ *
+ * The ticks turn three arbitrary numbers into a readable scale, and they sit
+ * directly on top of the ramp, so they have to work on all three. They did not:
+ * drawn in --accent alone they scored 1.30:1 on classic, whose pale stretch is
+ * its *middle* - which is where two of the three ticks land. A regression
+ * introduced with the ticks, not an inherited one.
+ *
+ * Recomputed from the ramp's control points at each documented level, for every
+ * ramp, rather than asserted.
+ */
+const TICK_ACCENT = [0x00, 0xe5, 0xff]; // --accent
+// `css` is declared inside an earlier block, so it is not in scope here.
+const tickCss = read('public/style.css');
+const casingToken = /--casing-ink:\s*(#[0-9a-f]{6})/i.exec(
+  stripComments(tickCss)
+);
+check(
+  'the casing ink is a token the ticks and the contours share',
+  Boolean(casingToken)
+);
+if (casingToken) {
+  const hex = casingToken[1];
+  const casingInk = [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  // ColorMapper is a browser classic script, so it cannot be require()d here.
+  // Interpolating between two already-known control points needs no colour
+  // science - only a straight sRGB mix, which is what ColorMapper.classic does.
+  const lerp = (a, b, t) => [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+  for (const ramp of ['inferno', 'cividis', 'classic']) {
+    const points = rampPoints(ramp);
+    for (const level of [-85, -70, -50]) {
+      const t = (level + 100) / 80;
+      if (t < 0 || t > 1) continue;
+      const scaled = t * (points.length - 1);
+      const idx = Math.min(Math.floor(scaled), points.length - 2);
+      const bar = lerp(points[idx], points[idx + 1], scaled - idx);
+      const best = Math.max(
+        contrast(TICK_ACCENT, bar),
+        contrast(casingInk, bar)
+      );
+      check(
+        `${ramp}: the -${-level} tick clears 3:1 on the colour it sits on ` +
+          `(${best.toFixed(2)}:1 over rgb(${bar.join(',')}))`,
+        best >= 3
+      );
+    }
+  }
+  check(
+    'the ticks carry a dark casing, not only the accent',
+    /border-left:\s*1px solid var\(--casing-ink\)/.test(
+      stripComments(tickCss)
+    ) &&
+      /border-right:\s*1px solid var\(--casing-ink\)/.test(
+        stripComments(tickCss)
+      )
+  );
+}
+
 if (actualCasing && actualCore) {
   const apart = contrast(actualCore, actualCasing);
   check(
