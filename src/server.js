@@ -530,6 +530,12 @@ function handleCommand(msg) {
       return null;
 
     case 'clearReadings':
+      // In a demo this is a no-op by design. Clearing would leave the Measured
+      // panel empty with the import control hidden and the next reset up to ten
+      // minutes away - a visitor could empty the room and not get it back.
+      if (CONFIG.DEMO_MODE) {
+        return 'readings are fixed in demo mode: the sample survey cannot be cleared';
+      }
       readings.clear();
       measuredCache = { key: '', value: null };
       return null;

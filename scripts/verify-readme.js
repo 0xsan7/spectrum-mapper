@@ -355,6 +355,57 @@ for (const e of endpoints) {
 }
 
 /*
+ * The demo-mode UI, checked for the two states that matter.
+ *
+ * A control that stays visible in a demo invites a click that can only fail
+ * (ingest answers 403), and a heading that still says "Measured" implies the
+ * readings are somebody's when they are the bundled sample. Both are driven
+ * from the server's frame flag, so the checks below are about the wiring, and
+ * the browser harness in the scratch directory is what proves the pixels.
+ */
+{
+  const dash = read('public/dashboard.js');
+  const html = read('public/index.html');
+  const serverSrc = read('src/server.js');
+
+  check(
+    'the Measured heading has an id the client can relabel',
+    /id="measuredHeading"/.test(html)
+  );
+  check(
+    'the import control is wrapped so the client can hide it',
+    /id="csvImportControl"/.test(html)
+  );
+  check(
+    'the demo heading text is "Sample survey (demo data)"',
+    /Sample survey \(demo data\)/.test(dash)
+  );
+  check(
+    'the heading reverts to "Measured" outside a demo',
+    /demo \? 'Sample survey \(demo data\)' : 'Measured'/.test(dash)
+  );
+  check(
+    'the import control is hidden when the frame says demo',
+    /importControl\.hidden = demo/.test(dash)
+  );
+  check(
+    'demo chrome is driven by the server flag, not a build-time constant',
+    /updateDemoChrome\(data\)/.test(dash) &&
+      /Boolean\(data && data\.demo\)/.test(dash)
+  );
+  check(
+    'the demo chrome runs before the panel body that reads its flag',
+    dash.indexOf('this.updateDemoChrome(data);') <
+      dash.indexOf('this.updateMeasuredPanel();'),
+    'the panel would render one frame with the wrong wording'
+  );
+  check(
+    'clearReadings is refused in demo mode',
+    /case 'clearReadings':[\s\S]{0,400}?CONFIG\.DEMO_MODE/.test(serverSrc)
+  );
+}
+
+/*
  * docs/deploy.md, checked for the things that are easy to state wrongly.
  *
  * A deploy page is read once, by someone about to spend an afternoon on it. The
