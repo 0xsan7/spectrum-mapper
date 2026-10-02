@@ -4,6 +4,112 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0]
+
+The release where the simulator stopped being only a simulator. You can now
+feed it RSSI you measured yourself, compare that against what the model
+predicted, and put the whole thing on the internet behind `DEMO_MODE` without
+accidentally letting a stranger edit your transmitter positions.
+
+Derived from `git log v1.1.0..HEAD` (15 commits).
+
+### Added
+
+**Real readings**
+
+- **`POST /api/readings`** accepts one `{x, y, rssi}` object or an array of
+  them. All-or-nothing: a 400-row survey with three typos is rejected whole,
+  with a message naming the bad row, and none of it is stored.
+- **Limits on ingest.** Finite numbers only; `x` and `y` inside the room;
+  `rssi` inside `MIN_RSSI..MAX_RSSI`; 500 readings per request; 100 KB per body.
+- **`READINGS_TOKEN`**, when set, requires `Authorization: Bearer …`. Unset, the
+  endpoint is open, which is the documented behaviour for a local run.
+- **A bounded store.** 5000 readings, oldest dropped first, so a device polling
+  every second cannot exhaust memory.
+- **`POST /api/import/readings.csv`** takes `text/csv` with the header
+  `x,y,rssi`, under the same validation and limits.
+- **`docs/examples/sample-readings.csv`**, a 42-point survey.
+
+**Looking at real readings**
+
+- **Inverse-distance interpolation** onto the existing grid: power 2, weighted
+  over the 8 nearest samples. At a sample point the interpolation returns that
+  sample's own value exactly.
+- **No extrapolation.** Cells more than 3 m from every sample are no-data, drawn
+  hatched. The model is not extended into territory nobody measured.
+- **A measured mode** in the `M`-key map-mode cycle, with the sample points
+  drawn as dots, and a CSV file picker in the sidebar.
+- **Model-vs-measured RMSE**, in dB at the sample points, shown in the sidebar
+  when readings exist — so you can see how wrong the model is where you know the
+  answer.
+- **`GET /api/export/measured.csv`**, the readings as CSV.
+
+**Public demo mode**
+
+- **`DEMO_MODE=1`** turns the app into a safe public copy: `POST /api/readings`
+  and all of `/api/import/*` answer `403` (not even a valid `READINGS_TOKEN`
+  gets through — the route is closed, not merely unauthorised), commands are
+  limited to 20/s per client, 50 concurrent WebSocket clients are the cap, an
+  optional `ALLOWED_ORIGINS` list is checked before the handshake, and the room
+  returns to its defaults after ten minutes with no commands.
+- **A banner in the UI**, because a shared room should not be a surprise:
+  "Public demo: everyone shares the same simulated room."
+- **`GET /healthz`**, answering independently of the simulation loop so a
+  platform's health check cannot restart the app every 30 seconds.
+- **`render.yaml`** for a free Docker web service, and **`docs/deploy.md`**
+  walking through deploying your own copy and what free-tier sleeping means for
+  visitors.
+
+### Changed
+
+- **Measured values are interpolated, not rendered per-reading**, so a handful
+  of points produce a usable map instead of 42 dots.
+- **`verify:readme` checks every registered route**, not just `GET`, and parses
+  multiline route declarations. It missed `POST /api/readings` for a full commit.
+- **The documentation checks were tightened three times over, each time because
+  a mutation proved the check was vacuous**: a server check that matched the
+  sample filename rather than the path that loads it; a `.dockerignore` check
+  that ignored ordering, which Docker applies in order, so a negation written
+  above the exclusion it undoes is dead; and a docs check that accepted any "42"
+  on the page, satisfied by a JSON example's `"accepted": 42`.
+- **The demo link checks became an exact-URL allowlist.** They used to forbid
+  every host except Render and GitHub; now exactly one deployment URL is
+  permitted, and a near-miss name, a subdomain of it, `http` rather than
+  `https`, or `…onrender.com.evil.example` still fail.
+- **The Dockerfile copies `docs/examples`.** It previously copied only `src`
+  and `public`, so a demo image had no sample survey to load.
+
+### Fixed
+
+- **The WebSocket `Origin` check enforced nothing.** The upgrade guard was
+  attached to an HTTP listener that never fires for a WebSocket upgrade, so
+  every connection was accepted regardless of `ALLOWED_ORIGINS`. Fixed by
+  moving to `WebSocket.Server({ noServer: true })` and checking at the upgrade.
+- **A dragged transmitter survived the idle reset.** Clearing the pin set
+  restored the _pin_ but not the _position_, so the next visitor inherited
+  somebody's moved transmitter and their reading of the room.
+- **Ingest validation accepted every coordinate.** `validateReading` referenced
+  `config.roomWidth`/`roomHeight`, which do not exist; `x > undefined` is
+  `false`, so every out-of-room point passed.
+- **The bounded store never reached its cap.** `add` spliced before pushing, so
+  the eviction ran against the wrong list.
+- **The RMSE divisor could be wrong** without any test noticing, because every
+  existing test used exactly two samples, where the correct divisor and a wrong
+  fixed one agree.
+- **Clearing readings in demo mode left the panel empty** with no way to refill
+  it until the next idle reset. `clearReadings` is now refused in demo mode.
+- **Three demo checks were satisfied by a function that was never called.**
+  Deleting the call to the demo-chrome update left every static check green,
+  and the browser harness found that hiding the wrapper left the Import button
+  still laid out and clickable inside the flex container.
+
+### A note on the sample data
+
+`docs/examples/sample-readings.csv` is **model output with small offsets added,
+not field measurements**. It exists so measured mode does something before you
+have any readings of your own, and it ships in every demo. If you want to know
+how good the model actually is, push your own survey and read the RMSE.
+
 ## [1.1.0]
 
 The first release after the repository was brought up to standard. Most of it

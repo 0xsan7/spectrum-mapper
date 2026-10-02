@@ -17,6 +17,15 @@ recording exists. See docs/README-hero.md for how to record one.
 </p>
 
 <p align="center">
+  <a href="https://spectrum-mapper-demo.onrender.com"><strong>Live demo</strong></a>
+</p>
+
+<p align="center">
+  Free hosting sleeps when idle, so the first load can take a while. Everyone
+  shares one simulated room.
+</p>
+
+<p align="center">
   <img src="docs/screenshot.png" alt="Spectrum Mapper dashboard" width="100%">
 </p>
 
@@ -57,6 +66,9 @@ watch four receivers try to work out where the mobile device is.
 - **Measured mode** — push real RSSI with `POST /api/readings` or import a survey
   CSV, and the map interpolates between your readings with M. Cells more than 3 m
   from every sample are hatched, never extrapolated
+- **A bundled sample survey** so measured mode does something before you have
+  any data of your own. It is model output with small offsets added, not field
+  measurements — see [Real data](docs/real-data.md)
 - **Model-vs-measured error** (RMSE in dB) at the sample points, so you can see
   how far the simulator is from the room it claims to model
 - **RSSI and error time series**, plus movement trails

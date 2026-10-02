@@ -7,9 +7,13 @@ with it.
 The service is a copy, not an installation. Ingest is refused, so nobody can
 write readings into your room, and there is nowhere for their measurements to go.
 
-> This page describes deploying your **own** copy. Where yours ends up is your
-> business, and no live-demo URL appears anywhere in this repository: a link in a
-> README that later stops working is worse than no link.
+There is a running copy at
+**<https://spectrum-mapper-demo.onrender.com>** — that is the author's
+deployment of the blueprint below, and the same link appears in the README and in
+`package.json`'s `homepage`.
+
+The rest of this page is about deploying **your own**. Yours will have a
+different URL, and nothing here assumes the link above.
 
 ## Deploy from the blueprint
 

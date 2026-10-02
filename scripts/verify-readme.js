@@ -355,6 +355,106 @@ for (const e of endpoints) {
 }
 
 /*
+ * One deployment URL, used consistently, and described honestly.
+ *
+ * The README, package.json and the deploy page each link the demo, and a
+ * visitor who follows one and then reads another should not find two different
+ * addresses. The honesty checks are here for the same reason: a link that works
+ * but misdescribes what it leads to is worse than no link.
+ */
+{
+  const DEMO_URL = 'https://spectrum-mapper-demo.onrender.com';
+  const readmeText = read('README.md');
+  const pkgJson = JSON.parse(read('package.json'));
+  const deployText = read('docs/deploy.md');
+
+  // The README link, directly under the nav block and labelled.
+  check('README has a Live demo link', /Live demo/.test(readmeText));
+  check(
+    'the README demo link uses the deployment URL',
+    new RegExp(
+      `href="${DEMO_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`
+    ).test(readmeText),
+    'expected the nav link to point at the deployment'
+  );
+  check(
+    'the README demo link sits under the nav links',
+    readmeText.indexOf('Live demo') > readmeText.indexOf('#roadmap') &&
+      readmeText.indexOf('Live demo') - readmeText.indexOf('#roadmap') < 400,
+    'it should be near the top, not buried'
+  );
+  check(
+    'the README says the free host sleeps and the first load is slow',
+    /sleeps when idle/i.test(readmeText) &&
+      /first load can take a while/i.test(readmeText)
+  );
+  check(
+    'the README says everyone shares one room',
+    // Normalised first: prettier reflows the prose, so the phrase spans two
+    // lines and a literal match fails on formatting alone.
+    /everyone shares one simulated room/i.test(readmeText.replace(/\s+/g, ' ')),
+    'the shared-room warning belongs next to the link'
+  );
+
+  check(
+    'package.json homepage is the deployment URL',
+    pkgJson.homepage === DEMO_URL,
+    String(pkgJson.homepage)
+  );
+  check(
+    "deploy.md names the URL as the author's deployment",
+    deployText.includes(DEMO_URL) &&
+      /author/.test(deployText.split(DEMO_URL)[1] || ''),
+    "the URL should be attributed, not presented as the reader's own"
+  );
+  check(
+    'deploy.md still explains deploying your own copy',
+    /deploy(ing)? \*\*your own\*\*/i.test(deployText) ||
+      /New → Blueprint/.test(deployText)
+  );
+
+  // All three, one URL.
+  check(
+    'the README, package.json and deploy.md agree on the demo URL',
+    readmeText.includes(DEMO_URL) &&
+      pkgJson.homepage === DEMO_URL &&
+      deployText.includes(DEMO_URL)
+  );
+  check(
+    'no second onrender.com URL exists in those three files',
+    [
+      ...new Set(
+        [
+          ...`${readmeText}\n${pkgJson.homepage}\n${deployText}`.matchAll(
+            /https?:\/\/[a-z0-9.-]*onrender\.com[a-z0-9./-]*/gi
+          ),
+        ].map((m) => m[0].toLowerCase())
+      ),
+    ].every((u) => u === DEMO_URL.toLowerCase()),
+    'more than one deployment URL is present'
+  );
+
+  // Honesty: the sample survey must never be described as field data.
+  for (const [f, text] of [
+    ['README.md', readmeText],
+    ['docs/deploy.md', deployText],
+  ]) {
+    check(
+      `${f} does not call the bundled survey real measurements`,
+      !/sample survey[^.]{0,80}\breal (measurements|readings|survey data)\b/i.test(
+        text
+      ) && !/real measurements[^.]{0,80}sample/i.test(text),
+      'the shipped CSV is model output with offsets, not field data'
+    );
+  }
+  check(
+    'README says the bundled sample is not field data',
+    /model output with small offsets/i.test(readmeText),
+    'the provenance belongs next to the link'
+  );
+}
+
+/*
  * The preloaded demo survey, documented and shipped.
  *
  * Four things have to be true at once, and the Dockerfile quietly broke one of
@@ -618,22 +718,52 @@ for (const e of endpoints) {
       )
     );
 
-    // The instruction was no live-demo URL anywhere. This repository documents
-    // how to deploy your own copy and points at nobody else's.
-    const allowedHosts =
-      /^(www\.|dashboard\.)?(render\.com|localhost|127\.0\.0\.1|github\.com|docs\.github\.com|your-service)$/;
-    const hostnames = [
+    // Which links are allowed, and why it is an exact-URL allowlist.
+    //
+    // This used to forbid every host except Render and GitHub. It now permits
+    // exactly one deployment URL, and only that one - not "anything on
+    // onrender.com". A host-level allowlist would wave through a typo'd or
+    // somebody else's service, which is the failure this check exists to catch.
+    const DEMO_URL = 'https://spectrum-mapper-demo.onrender.com';
+    const allowedExactUrls = new Set([DEMO_URL.toLowerCase()]);
+
+    const urlsIn = (text) => [
       ...new Set(
-        [...deploy.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) =>
-          m[1].toLowerCase()
+        [...text.matchAll(/https?:\/\/[^\s)\]>"'`]+/gi)].map((m) =>
+          m[0].replace(/[.,;:]$/, '').toLowerCase()
         )
       ),
-    ].filter((h) => !allowedHosts.test(h));
+    ];
+
+    // The hosts this project legitimately links: badge images, Node, GitHub,
+    // Render, and localhost in the curl examples. Anything else is a mistake.
+    const allowedHosts =
+      /^(www\.|dashboard\.)?(render\.com|img\.shields\.io|nodejs\.org|localhost(:\d+)?|127\.0\.0\.1(:\d+)?|github\.com|docs\.github\.com|your-service)$/;
+    const stray = urlsIn(deploy).filter((u) => {
+      if (allowedExactUrls.has(u)) return false;
+      const host = u.replace(/^https?:\/\//, '').split('/')[0];
+      return !allowedHosts.test(host);
+    });
     check(
-      'docs/deploy.md links nowhere but Render and the repository',
-      hostnames.length === 0,
-      `unexpected hosts: ${hostnames.join(', ')}`
+      'docs/deploy.md links only to Render, the repository, or the one demo URL',
+      stray.length === 0,
+      `unexpected URLs: ${stray.join(', ')}`
     );
+
+    // The same rule everywhere, so a stray demo URL cannot be introduced into
+    // another file to dodge the deploy.md check.
+    for (const f of ['README.md', 'package.json', 'render.yaml']) {
+      const strayElsewhere = urlsIn(read(f)).filter((u) => {
+        if (allowedExactUrls.has(u)) return false;
+        const host = u.replace(/^https?:\/\//, '').split('/')[0];
+        return !allowedHosts.test(host);
+      });
+      check(
+        `${f} links only to Render, the repository, or the one demo URL`,
+        strayElsewhere.length === 0,
+        `unexpected URLs: ${strayElsewhere.join(', ')}`
+      );
+    }
 
     // The blueprint values it documents must be the ones in the blueprint, or
     // the page is describing a deploy that does not happen.
@@ -1430,9 +1560,12 @@ if (!block) {
     ),
     repoUrl
   );
+  // The homepage is the live demo, not the README: a visitor arriving from npm
+  // wants the running thing. Kept as an exact value so it cannot drift into a
+  // repository URL or somebody else's deployment by accident.
   check(
-    'homepage points at the README',
-    homepage === 'https://github.com/0xsan7/spectrum-mapper#readme',
+    'homepage is the live demo',
+    homepage === 'https://spectrum-mapper-demo.onrender.com',
     homepage
   );
   check(
@@ -1531,3 +1664,132 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log('all README claims check out');
+/*
+ * The changelog's 1.2.0 entry, checked against the code it describes.
+ *
+ * A release note that drifts from the code is worse than none, because it is
+ * believed. These read the constants rather than restating them, so renaming
+ * MAX_POINTS or changing the neighbour count fails here.
+ */
+{
+  const changelog = read('CHANGELOG.md');
+  const i120 = changelog.indexOf('## [1.2.0]');
+  check(
+    'CHANGELOG.md has a 1.2.0 entry',
+    i120 > 0,
+    'the version being released must be documented'
+  );
+  const entry =
+    i120 > 0 ? changelog.slice(i120, changelog.indexOf('## [1.1.0]')) : '';
+  const norm = (t) => t.replace(/\s+/g, ' ');
+  // The formatter reflows the prose, so "5000\n  readings" is the same
+  // phrase as "5000 readings". Compare against the flattened entry.
+  const normEntry = norm(entry);
+  check('CHANGELOG 1.2.0 section found', entry.length > 0);
+
+  for (const h of ['### Added', '### Changed', '### Fixed']) {
+    check(
+      `CHANGELOG 1.2.0 has a ${h.replace('### ', '')} heading`,
+      entry.includes(h)
+    );
+  }
+
+  const pkgVersion = JSON.parse(read('package.json')).version;
+  const lockVersion = JSON.parse(read('package-lock.json')).version;
+  check(
+    'package.json is the version being released',
+    pkgVersion === '1.2.0',
+    pkgVersion
+  );
+  check(
+    'package-lock.json matches package.json',
+    lockVersion === pkgVersion,
+    `lock says ${lockVersion}, package says ${pkgVersion}`
+  );
+
+  // The numbers, read from the source of truth.
+  const readings = read('src/readings.js');
+  const interp = read('src/interpolate.js');
+  const cfg = read('src/config/constants.js');
+  const claim = (label, cond) =>
+    check(`CHANGELOG 1.2.0 matches the code: ${label}`, cond);
+
+  const cap = Number(/MAX_POINTS:\s*(\d+)/.exec(readings)?.[1]);
+  const perReq = Number(/MAX_ITEMS:\s*(\d+)/.exec(readings)?.[1]);
+  const bodyKb = Number(
+    /MAX_BODY_BYTES:\s*(\d+)\s*\*\s*1024/.exec(readings)?.[1]
+  );
+  const power = Number(/POWER:\s*(\d+)/.exec(interp)?.[1]);
+  const nearest = Number(/NEAREST:\s*(\d+)/.exec(interp)?.[1]);
+  const maxDist = Number(/MAX_DISTANCE:\s*([\d.]+)/.exec(interp)?.[1]);
+
+  // Interpolated, not written out: a hard-coded 5000 here would let the cap
+  // change in readings.js without failing this check, which is exactly what the
+  // neighbouring assertions do not do.
+  claim(`the ${cap}-reading store cap`, normEntry.includes(`${cap} readings`));
+  claim(
+    `the ${perReq}-per-request limit`,
+    normEntry.includes(`${perReq} readings per request`)
+  );
+  claim(
+    `the ${bodyKb} KB body limit`,
+    normEntry.includes(`${bodyKb} KB per body`)
+  );
+  claim(`IDW power ${power}`, normEntry.includes(`power ${power}`));
+  claim(
+    `the ${nearest} nearest samples`,
+    normEntry.includes(`${nearest} nearest samples`)
+  );
+  claim(
+    `the ${maxDist} m no-data radius`,
+    normEntry.includes(`${maxDist} m from every sample`)
+  );
+
+  const sampleRows =
+    read('docs/examples/sample-readings.csv').trim().split('\n').length - 1;
+  claim(
+    `the ${sampleRows}-point sample survey`,
+    normEntry.includes(`${sampleRows}-point survey`)
+  );
+
+  // Features named in the entry must exist as routes / config.
+  for (const [label, needle, hay] of [
+    ['POST /api/readings', "'/api/readings'", read('src/server.js')],
+    [
+      'POST /api/import/readings.csv',
+      "'/api/import/readings.csv'",
+      read('src/server.js'),
+    ],
+    [
+      'GET /api/export/measured.csv',
+      "'/api/export/measured.csv'",
+      read('src/server.js'),
+    ],
+    ['GET /healthz', "'/healthz'", read('src/server.js')],
+    ['DEMO_MODE', 'DEMO_MODE', cfg],
+    ['ALLOWED_ORIGINS', 'ALLOWED_ORIGINS', cfg],
+    ['READINGS_TOKEN', 'READINGS_TOKEN', cfg],
+  ]) {
+    claim(`${label} exists`, hay.includes(needle));
+  }
+
+  // The honesty requirement, pinned in the changelog itself.
+  claim(
+    'it says the sample CSV is model output, not field data',
+    /model output with small offsets[^.]*not field measurements/i.test(
+      normEntry
+    )
+  );
+  // The two bugs the release notes must name, because both shipped broken.
+  // Backticks instead of \s+: the phrase is split across lines by the
+  // formatter, and a literal \s+ is a whitespace class that also matches the
+  // newline but not the indentation prettier inserts between the words.
+  claim(
+    'it reports the WebSocket Origin check that enforced nothing',
+    normEntry.includes('check enforced nothing')
+  );
+  claim(
+    'it reports the dragged transmitter that survived the idle reset',
+    /dragged transmitter survived the idle reset/i.test(normEntry)
+  );
+}
