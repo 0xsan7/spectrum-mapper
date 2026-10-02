@@ -77,11 +77,24 @@
           </section>
 
           <section class="panel">
-            <h3>Measured</h3>
+            <!-- The heading is relabelled in demo mode, where the readings
+                 shown are the bundled sample survey rather than anyone's. -->
+            <h3 id="measuredHeading">Measured</h3>
             <div id="measuredPanel"></div>
             <div class="export-buttons">
-              <input type="file" id="csvPicker" accept=".csv,text/csv" hidden />
-              <button id="importCsv" type="button">Import readings CSV</button>
+              <!-- Hidden in demo mode: ingest answers 403 there, so offering the
+                   control invites a click that can only fail. -->
+              <span id="csvImportControl">
+                <input
+                  type="file"
+                  id="csvPicker"
+                  accept=".csv,text/csv"
+                  hidden
+                />
+                <button id="importCsv" type="button">
+                  Import readings CSV
+                </button>
+              </span>
               <button id="clearReadings" type="button">Clear readings</button>
             </div>
           </section>

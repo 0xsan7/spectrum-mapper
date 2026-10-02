@@ -73,8 +73,11 @@ class Dashboard {
 
     this.render();
     this.updateSidebar();
-    this.updateMeasuredPanel();
+    // Chrome first: it sets this.demoMode, which the panel body reads. The other
+    // way round shows the local-install wording for one frame on every update.
     this.updateDemoBanner(data);
+    this.updateDemoChrome(data);
+    this.updateMeasuredPanel();
     this.updateTracking();
     this.updateCoverage();
     this.updateChart();
@@ -198,15 +201,24 @@ class Dashboard {
     const mode = this.renderer.mapMode;
 
     if (!measured) {
+      // Outside a demo the hint tells you how to add readings. In a demo they
+      // cannot be added and the survey is preloaded, so say that instead of
+      // offering a control that is not there.
+      const hint = this.demoMode
+        ? '<div class="hint">A sample survey loads with the demo.</div>'
+        : '<div class="hint">Import a CSV or POST to /api/readings, then press M.</div>';
       panel.innerHTML =
-        '<div class="stat-row"><span>Readings</span><span>none</span></div>' +
-        '<div class="hint">Import a CSV or POST to /api/readings, then press M.</div>';
+        `<div class="stat-row"><span>Readings</span><span>none</span></div>` +
+        hint;
       return;
     }
     const gaps = measured.grid.filter((c) => c.hasData === false).length;
     const rmse = measured.rmseDb;
     panel.innerHTML =
       `<div class="stat-row"><span>Readings</span><span>${measured.count}</span></div>` +
+      (this.demoMode
+        ? '<div class="hint">Bundled sample survey, fixed for the demo.</div>'
+        : '') +
       `<div class="stat-row"><span>Map layer</span><span>${
         mode === 'measured' ? 'measured' : 'model'
       } (M)</span></div>` +
@@ -306,6 +318,40 @@ class Dashboard {
     // The wording stays in index.html so the notice reads correctly even
     // before this first frame arrives; here it is only shown or hidden.
     banner.hidden = !(data && data.demo);
+  }
+
+  /**
+   * Match the Measured panel to what it is actually showing.
+   *
+   * In a demo the readings are the bundled sample survey, not anybody's, so
+   * the heading says so and the import control goes away - ingest answers 403
+   * there, so the button could only ever produce an error. Both driven from the
+   * server's frame flag rather than baked into the page, so one build is right
+   * either way.
+   */
+  updateDemoChrome(data) {
+    const demo = Boolean(data && data.demo);
+    const heading = document.getElementById('measuredHeading');
+    if (heading) {
+      heading.textContent = demo ? 'Sample survey (demo data)' : 'Measured';
+    }
+    const importControl = document.getElementById('csvImportControl');
+    if (importControl) {
+      // The button as well as the wrapper. Hiding only the wrapper left the
+      // button laid out inside .export-buttons - measured in a real browser,
+      // not assumed. A control that looks clickable and can only 403 is worse
+      // than no control.
+      importControl.hidden = demo;
+      // The picker is hidden in the markup already; setting it again keeps the
+      // two states in one place rather than split between HTML and JS.
+      const picker = document.getElementById('csvPicker');
+      if (picker) picker.hidden = demo;
+      const button = document.getElementById('importCsv');
+      if (button) button.hidden = demo;
+    }
+    // The empty-state hint tells a local user how to add readings. In a demo
+    // they cannot, and the panel is never empty anyway.
+    this.demoMode = demo;
   }
 
   setStatusHint() {

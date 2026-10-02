@@ -223,6 +223,30 @@ Two things that bite in practice:
 - **Coordinates have to be real.** In a building that means a surveyed map or a
   tag system, not `WiFi.RSSI()` against a guessed position.
 
+## In a public demo
+
+Everything above works on a local install. In a demo deployment
+(`DEMO_MODE=1`, see [deploy.md](deploy.md)) the picture is deliberately
+different:
+
+- **The routes answer `403`.** `POST /api/readings` and
+  `POST /api/import/readings.csv` are closed, and a valid `READINGS_TOKEN` does
+  not reopen them. There is nowhere for a visitor's readings to go.
+- **The store starts full, not empty.** At boot the demo loads the bundled
+  [`docs/examples/sample-readings.csv`](examples/sample-readings.csv) - 42
+  points - so the Measured panel and the measured map mode work immediately. The
+  panel is headed "Sample survey (demo data)" to say whose measurements these are
+  not.
+- **The import and clear controls are hidden.** An import button that can only
+  return `403` is worse than no button, and clearing would leave a visitor with
+  an empty panel and no way to refill it.
+- **The idle reset restores that survey.** It does not empty the store, for the
+  same reason: a visitor who waits ten minutes should come back to the room as
+  they left it.
+
+None of this changes a local install. With `DEMO_MODE` unset the routes are
+open, the store starts empty, and the panel reads "Measured".
+
 ## See also
 
 - [Architecture](architecture.md) — where the routes live
