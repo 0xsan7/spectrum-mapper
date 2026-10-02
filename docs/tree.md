@@ -91,6 +91,7 @@ cannot drift. Regenerate with `npm run tree`.
     ├── interpolate.test.js
     ├── lattice-index.test.js
     ├── obstacles.test.js      # wall geometry, server state, NaN handling
+    ├── paint-alpha.test.js
     ├── pathLoss.test.js       # model anchored to reference values
     ├── readings-route.test.js
     ├── readings.test.js

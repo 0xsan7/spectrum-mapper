@@ -16,6 +16,12 @@ class LegendBar {
     this.bar = barEl;
     this.labels = labelsEl;
     this.ticks = ticksEl;
+    /**
+     * The RSSI levels marked on the bar. Set once by the dashboard; until it is
+     * set, render() paints no ticks rather than guessing which ones matter.
+     * @type {number[]|null}
+     */
+    this.levels = null;
   }
 
   /**
@@ -75,5 +81,20 @@ class LegendBar {
     // can read.
     const name = (ColorMapper.RAMPS[ramp] || {}).label || ramp;
     this.bar.title = `Hotspot threshold: ${minRssi + (maxRssi - minRssi) * 0.75} dBm. Ramp: ${name}`;
+
+    /* The ticks are drawn here, not by the caller.
+     *
+     * They used to be a separate renderTicks() call that only onFrame made, so
+     * anything else that changed the ramp - cycleRamp() - repainted the bar
+     * and left the ticks where they were. That was invisible while the ticks
+     * were ramp-independent, which they are: positioned by dBm and styled from
+     * CSS. But nothing enforced that, so the first change giving a tick a
+     * ramp-dependent style would have gone stale on every ramp switch with no
+     * test failing.
+     *
+     * Rendering both from one entry point removes the coupling instead of
+     * documenting it. Callers set `levels` once and never sequence anything.
+     */
+    if (this.levels) this.renderTicks(minRssi, maxRssi, this.levels);
   }
 }

@@ -16,6 +16,9 @@ class Dashboard {
       document.getElementById('legendLabels'),
       document.getElementById('legendTicks')
     );
+    // Set once: legend.render() paints the ticks from here, so no caller has to
+    // remember to. See the note in LegendBar.render.
+    this.legend.levels = CONTOUR_LEVELS;
     this.currentData = null;
     this.isPaused = false;
     this.frameRequested = false;
@@ -166,8 +169,10 @@ class Dashboard {
     this.roomHeight = data.roomHeight;
     this.isPaused = Boolean(data.params && data.params.paused);
 
+    // render() draws the bar, the labels and the level ticks together, so the
+    // ramp, the gradient and the ticks cannot drift apart on any path that
+    // repaints the legend.
     this.legend.render(this.minRssi, this.maxRssi, this.renderer.ramp);
-    this.legend.renderTicks(this.minRssi, this.maxRssi, CONTOUR_LEVELS);
 
     if (first) {
       // The sidebar cannot be built before the first frame, because the
